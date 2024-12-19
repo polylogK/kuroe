@@ -51,6 +51,28 @@ pub(crate) trait Language {
     fn run(&self, target: &Path, seed: i32) -> CommandStep;
 }
 
+pub(crate) struct Clang;
+impl Language for Clang {
+    fn is_valid_ext(&self, ext: &str) -> bool {
+        return ext == "c";
+    }
+
+    fn compile(&self, target: &Path) -> Vec<CommandStep> {
+        vec![CommandStep::new(
+            "gcc".to_string(),
+            vec![
+                "-std=c11".to_string(),
+                "-O2".to_string(),
+                target.to_string_lossy().to_string(),
+            ],
+        )]
+    }
+
+    fn run(&self, _target: &Path, seed: i32) -> CommandStep {
+        CommandStep::new("./a.out".to_string(), vec![seed.to_string()])
+    }
+}
+
 pub(crate) struct Cpp;
 impl Language for Cpp {
     fn is_valid_ext(&self, ext: &str) -> bool {
@@ -70,6 +92,24 @@ impl Language for Cpp {
 
     fn run(&self, _target: &Path, seed: i32) -> CommandStep {
         CommandStep::new("./a.out".to_string(), vec![seed.to_string()])
+    }
+}
+
+pub(crate) struct Python;
+impl Language for Python {
+    fn is_valid_ext(&self, ext: &str) -> bool {
+        return ext == "py";
+    }
+
+    fn compile(&self, _target: &Path) -> Vec<CommandStep> {
+        Vec::new()
+    }
+
+    fn run(&self, target: &Path, seed: i32) -> CommandStep {
+        CommandStep::new(
+            "python3".to_string(),
+            vec![target.to_string_lossy().to_string(), seed.to_string()],
+        )
     }
 }
 
@@ -124,14 +164,35 @@ mod tests {
     }
 
     #[test]
-    fn test_cpp() {
-        let cpp = Cpp;
-        assert_eq!(cpp.is_valid_ext("cpp"), true);
-        assert_eq!(cpp.is_valid_ext("cc"), true);
-        assert_eq!(cpp.is_valid_ext("test"), false);
+    fn test_language() {
+        assert!(Clang.is_valid_ext("c"));
+        assert!(!Clang.is_valid_ext("test"));
 
-        let cmd = cpp.run(Path::new(""), 0);
+        assert!(Cpp.is_valid_ext("cpp"));
+        assert!(Cpp.is_valid_ext("cc"));
+        assert!(!Cpp.is_valid_ext("test"));
+
+        assert!(Python.is_valid_ext("py"));
+        assert!(!Python.is_valid_ext("test"));
+
+        assert!(Txt.is_valid_ext("txt"));
+        assert!(Txt.is_valid_ext("in"));
+        assert!(!Txt.is_valid_ext("test"));
+
+        let cmd = Clang.run(Path::new("target"), 0);
         assert_eq!(cmd.program, "./a.out".to_string());
+        assert_eq!(cmd.args.len(), 1);
+
+        let cmd = Cpp.run(Path::new("target"), 0);
+        assert_eq!(cmd.program, "./a.out".to_string());
+        assert_eq!(cmd.args.len(), 1);
+
+        let cmd = Python.run(Path::new("target"), 0);
+        assert_eq!(cmd.program, "python3".to_string());
+        assert_eq!(cmd.args.len(), 2);
+
+        let cmd = Txt.run(Path::new("target"), 0);
+        assert_eq!(cmd.program, "cat".to_string());
         assert_eq!(cmd.args.len(), 1);
     }
 
@@ -153,7 +214,8 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_compile_and_run() {
+    fn test_compile_and_run_cpp() {
+        let lang = Cpp;
         let dir = tempdir().unwrap();
 
         // hello プログラムの作成
@@ -167,8 +229,7 @@ mod tests {
         .unwrap();
 
         // コンパイル
-        let cpp = Cpp;
-        for step in cpp.compile(&hello_path) {
+        for step in lang.compile(&hello_path) {
             step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(2))
                 .unwrap();
         }
@@ -176,10 +237,38 @@ mod tests {
         // 実行
         let output_path = dir.path().join("output.txt");
         let output = File::create(&output_path).unwrap();
-        cpp.run(Path::new(""), 0)
+        lang.run(&hello_path, 0)
             .execute(&dir, Stdio::null(), output, Duration::from_secs(2))
             .unwrap();
 
         assert_eq!(read_to_string(&output_path).unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_compile_and_run_python() {
+        let lang = Python;
+        let dir = tempdir().unwrap();
+
+        // hello プログラムの作成
+        let hello_path = dir.path().join("hello.py");
+        let hello = File::create(&hello_path).unwrap();
+        CommandStep::new("echo".to_string(), vec!["print('hello')".to_string()])
+            .execute(&dir, Stdio::null(), hello, Duration::from_secs(2))
+            .unwrap();
+
+        // コンパイル
+        for step in lang.compile(&hello_path) {
+            step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(2))
+                .unwrap();
+        }
+
+        // 実行
+        let output_path = dir.path().join("output.txt");
+        let output = File::create(&output_path).unwrap();
+        lang.run(&hello_path, 0)
+            .execute(&dir, Stdio::null(), output, Duration::from_secs(2))
+            .unwrap();
+
+        assert_eq!(read_to_string(&output_path).unwrap(), "hello\n");
     }
 }
