@@ -3,7 +3,7 @@ use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
 use regex::Regex;
-use std::fs::{create_dir, File};
+use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -141,7 +141,7 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
     };
 
     if !args.outdir.exists() {
-        create_dir(&args.outdir)?;
+        create_dir_all(&args.outdir)?;
     }
 
     let mut cases = Vec::new();
