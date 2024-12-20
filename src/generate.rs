@@ -20,7 +20,7 @@ pub(super) struct GenerateArgs {
     recursive: bool,
 
     ///
-    #[arg(short, long, default_value = "./testcases")]
+    #[arg(short, long, default_value = "./testcases/input")]
     outdir: PathBuf,
 
     /// number of generation per generator. Specifying by filename has higher priority
