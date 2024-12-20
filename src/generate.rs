@@ -1,19 +1,19 @@
+use crate::language::{detect_language, Clang, Cpp, CustomLang, Language, Python, Txt};
+use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
+use regex::Regex;
 use std::fs::{create_dir, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
-use crate::language::{detect_language, Cpp, Language, Txt};
-use crate::utils::find_files;
-
 #[derive(Debug, Args)]
 pub(super) struct GenerateArgs {
     /// directory containing the generator or path to the generator
     #[arg(value_name = "GENERATOR", required = true)]
-    generator: Vec<PathBuf>,
+    generators: Vec<PathBuf>,
 
     /// recursively search for generators
     #[arg(short, long, default_value_t = false)]
@@ -23,33 +23,45 @@ pub(super) struct GenerateArgs {
     #[arg(short, long, default_value = "./testcases")]
     outdir: PathBuf,
 
-    /// number of generation per generator. Specifying by file name has higher priority.
-    #[arg(short = 'n', long, default_value_t = 1)]
-    count: i32,
+    /// number of generation per generator. Specifying by filename has higher priority
+    #[arg(short = 'n', long, default_value_t = 1
+    , value_parser = clap::value_parser!(u32).range(1..))]
+    count: u32,
 
     /// seed, seed+1, seed+2, ..., seed+(n-1)
-    #[arg(short, long, default_value_t = 0, required = false)]
-    seed: i32,
+    #[arg(short, long, default_value_t = 0, required = false
+    , value_parser = clap::value_parser!(u32).range(0..))]
+    seed: u32,
+
+    /// COMMAND[0:-1] are the compile commands. COMMAND[-1] is execute command
+    #[arg(
+        short,
+        long,
+        value_name = "<EXT> <COMMAND>...",
+        required = false,
+        value_delimiter = ','
+    )]
+    language: Vec<String>,
 }
 
 #[derive(Debug)]
 struct GenFileInfo {
     name: String,
-    count: Option<i32>,
+    count: Option<u32>,
     ext: String,
 }
 
 impl From<&Path> for GenFileInfo {
     /// hoge.{count}.ext を解釈する
-    /// count が i32 としてパースできる場合は name = "hoge"
-    /// count が i32 としてパースできない場合は name = "hoge.{count}"
+    /// count が u32 としてパースできる場合は name = "hoge"
+    /// count が u32 としてパースできない場合は name = "hoge.{count}"
     fn from(path: &Path) -> Self {
         let ext = path.extension().unwrap().to_string_lossy().to_string();
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
 
         // count の解決
         let parts: Vec<&str> = stem.rsplitn(2, '.').collect();
-        let count = parts.get(0).and_then(|s| s.parse::<i32>().ok());
+        let count = parts.get(0).and_then(|s| s.parse::<u32>().ok());
         let name = if count.is_some() {
             parts.get(1).map(|s| s.to_string()).unwrap()
         } else {
@@ -63,8 +75,8 @@ impl From<&Path> for GenFileInfo {
 fn generate(
     target: &Path,
     outdir: &Path,
-    count: i32,
-    seed: i32,
+    count: u32,
+    seed: u32,
     langs: &Vec<Box<dyn Language>>,
 ) -> Result<(Vec<PathBuf>, Duration)> {
     let now = Instant::now();
@@ -87,7 +99,7 @@ fn generate(
         let output_path = outdir.join(output_name);
         let output = File::create(&output_path).unwrap();
 
-        lang.run(&target, seed + i)
+        lang.run(&target, seed + i as u32)
             .execute(&dir, Stdio::null(), output, Duration::from_secs(10))
             .with_context(|| format!("failed to generate {:?} at seed = {:?}", target, seed + i))?;
 
@@ -98,17 +110,35 @@ fn generate(
 }
 
 pub(super) fn root(args: GenerateArgs) -> Result<()> {
+    println!("{:?}", args);
+
     let generators = {
         let mut generators = Vec::new();
-        for base in args.generator {
+        for base in args.generators {
             let mut sub_files = find_files(&base, args.recursive).unwrap();
             generators.append(&mut sub_files);
         }
         generators
     };
 
-    let langs: Vec<Box<dyn Language>> = vec![Box::new(Cpp), Box::new(Txt)];
-    // TODO: カスタム言語対応
+    let langs: Vec<Box<dyn Language>> = if args.language.len() == 0 {
+        vec![
+            Box::new(Clang),
+            Box::new(Cpp),
+            Box::new(Python),
+            Box::new(Txt),
+        ]
+    } else {
+        let custom_lang =
+            CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
+        vec![
+            Box::new(custom_lang),
+            Box::new(Clang),
+            Box::new(Cpp),
+            Box::new(Python),
+            Box::new(Txt),
+        ]
+    };
 
     if !args.outdir.exists() {
         create_dir(&args.outdir)?;

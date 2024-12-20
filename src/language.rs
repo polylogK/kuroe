@@ -1,8 +1,10 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
+
+use regex::Regex;
 
 #[derive(Debug)]
 pub(crate) struct CommandStep {
@@ -48,7 +50,7 @@ impl CommandStep {
 pub(crate) trait Language {
     fn is_valid_ext(&self, ext: &str) -> bool;
     fn compile(&self, target: &Path) -> Vec<CommandStep>;
-    fn run(&self, target: &Path, seed: i32) -> CommandStep;
+    fn run(&self, target: &Path, seed: u32) -> CommandStep;
 }
 
 pub(crate) struct Clang;
@@ -68,7 +70,7 @@ impl Language for Clang {
         )]
     }
 
-    fn run(&self, _target: &Path, seed: i32) -> CommandStep {
+    fn run(&self, _target: &Path, seed: u32) -> CommandStep {
         CommandStep::new("./a.out".to_string(), vec![seed.to_string()])
     }
 }
@@ -90,7 +92,7 @@ impl Language for Cpp {
         )]
     }
 
-    fn run(&self, _target: &Path, seed: i32) -> CommandStep {
+    fn run(&self, _target: &Path, seed: u32) -> CommandStep {
         CommandStep::new("./a.out".to_string(), vec![seed.to_string()])
     }
 }
@@ -105,7 +107,7 @@ impl Language for Python {
         Vec::new()
     }
 
-    fn run(&self, target: &Path, seed: i32) -> CommandStep {
+    fn run(&self, target: &Path, seed: u32) -> CommandStep {
         CommandStep::new(
             "python3".to_string(),
             vec![target.to_string_lossy().to_string(), seed.to_string()],
@@ -123,11 +125,60 @@ impl Language for Txt {
         Vec::new()
     }
 
-    fn run(&self, target: &Path, _seed: i32) -> CommandStep {
+    fn run(&self, target: &Path, _seed: u32) -> CommandStep {
         CommandStep::new(
             "cat".to_string(),
             vec![target.to_string_lossy().to_string()],
         )
+    }
+}
+
+pub(crate) struct CustomLang {
+    ext: Regex,
+    compile: Vec<String>,
+    run: String,
+}
+impl CustomLang {
+    pub(crate) fn new(ext: Regex, commands: Vec<String>) -> Result<Self> {
+        let ext = format!("^({ext})$");
+        let ext = Regex::new(&ext)?;
+        let len = commands.len();
+        ensure!(len >= 1, "commands.len() >= 1");
+
+        Ok(Self {
+            ext,
+            compile: commands[0..(len - 1)].to_vec(),
+            run: commands[len - 1].clone(),
+        })
+    }
+}
+impl Language for CustomLang {
+    fn is_valid_ext(&self, ext: &str) -> bool {
+        return self.ext.is_match(ext);
+    }
+
+    fn compile(&self, target: &Path) -> Vec<CommandStep> {
+        let target = target.canonicalize().unwrap().to_string_lossy().to_string();
+
+        let mut cmds = Vec::new();
+        for command in &self.compile {
+            let command = command.replace("%(target)", &target);
+            let parts: Vec<String> = command.split(' ').map(|s| s.to_string()).collect();
+
+            cmds.push(CommandStep::new(parts[0].clone(), parts[1..].to_vec()));
+        }
+        cmds
+    }
+
+    fn run(&self, target: &Path, seed: u32) -> CommandStep {
+        let target = target.canonicalize().unwrap().to_string_lossy().to_string();
+        let seed = seed.to_string();
+
+        let command = self.run.replace("%(target)", &target);
+        let command = command.replace("%(seed)", &seed);
+        let parts: Vec<String> = command.split(' ').map(|s| s.to_string()).collect();
+
+        CommandStep::new(parts[0].clone(), parts[1..].to_vec())
     }
 }
 
@@ -194,6 +245,13 @@ mod tests {
         let cmd = Txt.run(Path::new("target"), 0);
         assert_eq!(cmd.program, "cat".to_string());
         assert_eq!(cmd.args.len(), 1);
+    }
+
+    #[test]
+    fn test_custom_language() {
+        let lang = CustomLang::new(Regex::new("rs").unwrap(), vec!["true".to_string()]).unwrap();
+        assert!(lang.is_valid_ext("rs"));
+        assert!(!lang.is_valid_ext("test"));
     }
 
     #[test]
@@ -270,5 +328,43 @@ mod tests {
             .unwrap();
 
         assert_eq!(read_to_string(&output_path).unwrap(), "hello\n");
+    }
+
+    #[test]
+    fn test_compile_and_run_custom_lang() {
+        let lang = CustomLang::new(
+            Regex::new("cpp").unwrap(),
+            vec![
+                "g++ %(target) -o test".to_string(), // compile
+                "./test %(seed)".to_string(),        // execute
+            ],
+        )
+        .unwrap();
+        let dir = tempdir().unwrap();
+
+        // hello プログラムの作成
+        let hello_path = dir.path().join("hello.cpp");
+        let hello = File::create(&hello_path).unwrap();
+        CommandStep::new(
+            "echo".to_string(),
+            vec!["#include <cstdio>\nint main(int argc, char *argv[]) { printf(\"hello %s\", argv[1]); }".to_string()],
+        )
+        .execute(&dir, Stdio::null(), hello, Duration::from_secs(2))
+        .unwrap();
+
+        // コンパイル
+        for step in lang.compile(&hello_path) {
+            step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(2))
+                .unwrap();
+        }
+
+        // 実行
+        let output_path = dir.path().join("output.txt");
+        let output = File::create(&output_path).unwrap();
+        lang.run(&hello_path, 0)
+            .execute(&dir, Stdio::null(), output, Duration::from_secs(2))
+            .unwrap();
+
+        assert_eq!(read_to_string(&output_path).unwrap(), "hello 0");
     }
 }
