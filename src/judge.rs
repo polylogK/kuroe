@@ -8,15 +8,11 @@ pub(super) struct JudgeArgs {
     #[arg(value_name = "SOLVER", required = true)]
     solver: PathBuf,
 
-    /// directory containing the testcases(*.in)
+    /// directory containing the testcases(*.in and *.ans)
     #[arg(value_name = "TESTCASE", default_value = "./testcases")]
-    indir: PathBuf,
+    testcases: PathBuf,
 
-    /// directory containing the testcases(*.out)
-    #[arg(value_name = "SOLUTION", default_value = "./testcases")]
-    soldir: PathBuf,
-
-    /// saving dicrectory for solver output
-    #[arg(short, long)]
-    outdir: Option<PathBuf>,
+    /// saving dicrectory for output
+    #[arg(short, long, default_value = "./testcases/output")]
+    outdir: PathBuf,
 }
