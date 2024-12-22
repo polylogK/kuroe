@@ -28,8 +28,8 @@ mod tests {
 
     #[test]
     fn test_find_files() {
-        let files = find_files(Path::new("./example"), false).unwrap();
-        assert_eq!(files.len(), 0);
+        let files = find_files(Path::new("./src/main.rs"), false).unwrap();
+        assert_eq!(files.len(), 1);
 
         let files = find_files(Path::new("./example"), true).unwrap();
         assert!(files.len() > 1);
