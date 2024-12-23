@@ -145,9 +145,7 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
 
     let mut cases = Vec::new();
     for target in generators {
-        if let Ok(mut sub_cases) =
-            generate(&target, &args.outdir, args.count, args.seed, &langs)
-        {
+        if let Ok(mut sub_cases) = generate(&target, &args.outdir, args.count, args.seed, &langs) {
             println!("[GENERATED] {:?}", target);
             cases.append(&mut sub_cases);
         } else {
