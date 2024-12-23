@@ -20,12 +20,14 @@ impl CommandStep {
     pub(crate) fn execute<P: AsRef<Path>, T: Into<Stdio>, U: Into<Stdio>>(
         &self,
         current_dir: P,
+        additional_args: Vec<String>,
         stdin: T,
         stdout: U,
         time_limit: Duration,
     ) -> Result<()> {
+        let args = [&self.args[..], &additional_args[..]].concat();
         let mut child = Command::new(&self.program)
-            .args(&self.args)
+            .args(args)
             .current_dir(current_dir)
             .stdin(stdin)
             .stdout(stdout)
@@ -49,8 +51,8 @@ impl CommandStep {
 
 pub(crate) trait Language {
     fn is_valid_ext(&self, ext: &str) -> bool;
-    fn compile(&self, target: &Path) -> Vec<CommandStep>;
-    fn run(&self, target: &Path, seed: u32) -> CommandStep;
+    fn compile(&self, target: &Path) -> Result<Vec<CommandStep>>;
+    fn run(&self, target: &Path) -> Result<CommandStep>;
 }
 
 pub(crate) struct Clang;
@@ -59,19 +61,19 @@ impl Language for Clang {
         return ext == "c";
     }
 
-    fn compile(&self, target: &Path) -> Vec<CommandStep> {
-        vec![CommandStep::new(
+    fn compile(&self, target: &Path) -> Result<Vec<CommandStep>> {
+        Ok(vec![CommandStep::new(
             "gcc".to_string(),
             vec![
                 "-std=c11".to_string(),
                 "-O2".to_string(),
-                target.to_string_lossy().to_string(),
+                target.canonicalize()?.to_string_lossy().to_string(),
             ],
-        )]
+        )])
     }
 
-    fn run(&self, _target: &Path, seed: u32) -> CommandStep {
-        CommandStep::new("./a.out".to_string(), vec![seed.to_string()])
+    fn run(&self, _target: &Path) -> Result<CommandStep> {
+        Ok(CommandStep::new("./a.out".to_string(), Vec::new()))
     }
 }
 
@@ -81,19 +83,19 @@ impl Language for Cpp {
         return ext == "cpp" || ext == "cc";
     }
 
-    fn compile(&self, target: &Path) -> Vec<CommandStep> {
-        vec![CommandStep::new(
+    fn compile(&self, target: &Path) -> Result<Vec<CommandStep>> {
+        Ok(vec![CommandStep::new(
             "g++".to_string(),
             vec![
                 "-std=c++20".to_string(),
                 "-O2".to_string(),
-                target.to_string_lossy().to_string(),
+                target.canonicalize()?.to_string_lossy().to_string(),
             ],
-        )]
+        )])
     }
 
-    fn run(&self, _target: &Path, seed: u32) -> CommandStep {
-        CommandStep::new("./a.out".to_string(), vec![seed.to_string()])
+    fn run(&self, _target: &Path) -> Result<CommandStep> {
+        Ok(CommandStep::new("./a.out".to_string(), Vec::new()))
     }
 }
 
@@ -103,15 +105,15 @@ impl Language for Python {
         return ext == "py";
     }
 
-    fn compile(&self, _target: &Path) -> Vec<CommandStep> {
-        Vec::new()
+    fn compile(&self, _target: &Path) -> Result<Vec<CommandStep>> {
+        Ok(Vec::new())
     }
 
-    fn run(&self, target: &Path, seed: u32) -> CommandStep {
-        CommandStep::new(
+    fn run(&self, target: &Path) -> Result<CommandStep> {
+        Ok(CommandStep::new(
             "python3".to_string(),
-            vec![target.to_string_lossy().to_string(), seed.to_string()],
-        )
+            vec![target.canonicalize()?.to_string_lossy().to_string()],
+        ))
     }
 }
 
@@ -121,15 +123,15 @@ impl Language for Txt {
         return ext == "txt" || ext == "in";
     }
 
-    fn compile(&self, _target: &Path) -> Vec<CommandStep> {
-        Vec::new()
+    fn compile(&self, _target: &Path) -> Result<Vec<CommandStep>> {
+        Ok(Vec::new())
     }
 
-    fn run(&self, target: &Path, _seed: u32) -> CommandStep {
-        CommandStep::new(
+    fn run(&self, target: &Path) -> Result<CommandStep> {
+        Ok(CommandStep::new(
             "cat".to_string(),
-            vec![target.to_string_lossy().to_string()],
-        )
+            vec![target.canonicalize()?.to_string_lossy().to_string()],
+        ))
     }
 }
 
@@ -157,8 +159,8 @@ impl Language for CustomLang {
         return self.ext.is_match(ext);
     }
 
-    fn compile(&self, target: &Path) -> Vec<CommandStep> {
-        let target = target.canonicalize().unwrap().to_string_lossy().to_string();
+    fn compile(&self, target: &Path) -> Result<Vec<CommandStep>> {
+        let target = target.canonicalize()?.to_string_lossy().to_string();
 
         let mut cmds = Vec::new();
         for command in &self.compile {
@@ -167,18 +169,16 @@ impl Language for CustomLang {
 
             cmds.push(CommandStep::new(parts[0].clone(), parts[1..].to_vec()));
         }
-        cmds
+        Ok(cmds)
     }
 
-    fn run(&self, target: &Path, seed: u32) -> CommandStep {
-        let target = target.canonicalize().unwrap().to_string_lossy().to_string();
-        let seed = seed.to_string();
+    fn run(&self, target: &Path) -> Result<CommandStep> {
+        let target = target.canonicalize()?.to_string_lossy().to_string();
 
         let command = self.run.replace("%(target)", &target);
-        let command = command.replace("%(seed)", &seed);
         let parts: Vec<String> = command.split(' ').map(|s| s.to_string()).collect();
 
-        CommandStep::new(parts[0].clone(), parts[1..].to_vec())
+        Ok(CommandStep::new(parts[0].clone(), parts[1..].to_vec()))
     }
 }
 
@@ -205,12 +205,24 @@ mod tests {
     fn test_execute() {
         let step = CommandStep::new("true".to_string(), Vec::new());
         assert!(step
-            .execute("./", Stdio::null(), Stdio::null(), Duration::from_secs(1))
+            .execute(
+                "./",
+                Vec::new(),
+                Stdio::null(),
+                Stdio::null(),
+                Duration::from_secs(1)
+            )
             .is_ok());
 
         let step = CommandStep::new("false".to_string(), Vec::new());
         assert!(step
-            .execute("./", Stdio::null(), Stdio::null(), Duration::from_secs(1))
+            .execute(
+                "./",
+                Vec::new(),
+                Stdio::null(),
+                Stdio::null(),
+                Duration::from_secs(1)
+            )
             .is_err());
     }
 
@@ -230,19 +242,19 @@ mod tests {
         assert!(Txt.is_valid_ext("in"));
         assert!(!Txt.is_valid_ext("test"));
 
-        let cmd = Clang.run(Path::new("target"), 0);
+        let cmd = Clang.run(Path::new("target")).unwrap();
         assert_eq!(cmd.program, "./a.out".to_string());
-        assert_eq!(cmd.args.len(), 1);
+        assert_eq!(cmd.args.len(), 0);
 
-        let cmd = Cpp.run(Path::new("target"), 0);
+        let cmd = Cpp.run(Path::new("target")).unwrap();
         assert_eq!(cmd.program, "./a.out".to_string());
-        assert_eq!(cmd.args.len(), 1);
+        assert_eq!(cmd.args.len(), 0);
 
-        let cmd = Python.run(Path::new("target"), 0);
+        let cmd = Python.run(Path::new("target")).unwrap();
         assert_eq!(cmd.program, "python3".to_string());
-        assert_eq!(cmd.args.len(), 2);
+        assert_eq!(cmd.args.len(), 1);
 
-        let cmd = Txt.run(Path::new("target"), 0);
+        let cmd = Txt.run(Path::new("target")).unwrap();
         assert_eq!(cmd.program, "cat".to_string());
         assert_eq!(cmd.args.len(), 1);
     }
@@ -283,20 +295,39 @@ mod tests {
             "echo".to_string(),
             vec!["#include <cstdio>\nint main(){ printf(\"hello\"); }".to_string()],
         )
-        .execute(&dir, Stdio::null(), hello, Duration::from_secs(2))
+        .execute(
+            &dir,
+            Vec::new(),
+            Stdio::null(),
+            hello,
+            Duration::from_secs(2),
+        )
         .unwrap();
 
         // コンパイル
-        for step in lang.compile(&hello_path) {
-            step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(2))
-                .unwrap();
+        for step in lang.compile(&hello_path).unwrap() {
+            step.execute(
+                &dir,
+                Vec::new(),
+                Stdio::null(),
+                Stdio::null(),
+                Duration::from_secs(2),
+            )
+            .unwrap();
         }
 
         // 実行
         let output_path = dir.path().join("output.txt");
         let output = File::create(&output_path).unwrap();
-        lang.run(&hello_path, 0)
-            .execute(&dir, Stdio::null(), output, Duration::from_secs(2))
+        lang.run(&hello_path)
+            .unwrap()
+            .execute(
+                &dir,
+                Vec::new(),
+                Stdio::null(),
+                output,
+                Duration::from_secs(2),
+            )
             .unwrap();
 
         assert_eq!(read_to_string(&output_path).unwrap(), "hello");
@@ -311,20 +342,39 @@ mod tests {
         let hello_path = dir.path().join("hello.py");
         let hello = File::create(&hello_path).unwrap();
         CommandStep::new("echo".to_string(), vec!["print('hello')".to_string()])
-            .execute(&dir, Stdio::null(), hello, Duration::from_secs(2))
+            .execute(
+                &dir,
+                Vec::new(),
+                Stdio::null(),
+                hello,
+                Duration::from_secs(2),
+            )
             .unwrap();
 
         // コンパイル
-        for step in lang.compile(&hello_path) {
-            step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(2))
-                .unwrap();
+        for step in lang.compile(&hello_path).unwrap() {
+            step.execute(
+                &dir,
+                Vec::new(),
+                Stdio::null(),
+                Stdio::null(),
+                Duration::from_secs(2),
+            )
+            .unwrap();
         }
 
         // 実行
         let output_path = dir.path().join("output.txt");
         let output = File::create(&output_path).unwrap();
-        lang.run(&hello_path, 0)
-            .execute(&dir, Stdio::null(), output, Duration::from_secs(2))
+        lang.run(&hello_path)
+            .unwrap()
+            .execute(
+                &dir,
+                Vec::new(),
+                Stdio::null(),
+                output,
+                Duration::from_secs(2),
+            )
             .unwrap();
 
         assert_eq!(read_to_string(&output_path).unwrap(), "hello\n");
@@ -336,7 +386,7 @@ mod tests {
             Regex::new("cpp").unwrap(),
             vec![
                 "g++ %(target) -o test".to_string(), // compile
-                "./test %(seed)".to_string(),        // execute
+                "./test".to_string(),                // execute
             ],
         )
         .unwrap();
@@ -349,20 +399,33 @@ mod tests {
             "echo".to_string(),
             vec!["#include <cstdio>\nint main(int argc, char *argv[]) { printf(\"hello %s\", argv[1]); }".to_string()],
         )
-        .execute(&dir, Stdio::null(), hello, Duration::from_secs(2))
+        .execute(&dir, Vec::new(), Stdio::null(), hello, Duration::from_secs(2))
         .unwrap();
 
         // コンパイル
-        for step in lang.compile(&hello_path) {
-            step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(2))
-                .unwrap();
+        for step in lang.compile(&hello_path).unwrap() {
+            step.execute(
+                &dir,
+                Vec::new(),
+                Stdio::null(),
+                Stdio::null(),
+                Duration::from_secs(2),
+            )
+            .unwrap();
         }
 
         // 実行
         let output_path = dir.path().join("output.txt");
         let output = File::create(&output_path).unwrap();
-        lang.run(&hello_path, 0)
-            .execute(&dir, Stdio::null(), output, Duration::from_secs(2))
+        lang.run(&hello_path)
+            .unwrap()
+            .execute(
+                &dir,
+                vec!["0".to_string()],
+                Stdio::null(),
+                output,
+                Duration::from_secs(2),
+            )
             .unwrap();
 
         assert_eq!(read_to_string(&output_path).unwrap(), "hello 0");

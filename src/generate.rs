@@ -81,13 +81,18 @@ fn generate(
     langs: &Vec<Box<dyn Language>>,
 ) -> Result<Vec<PathBuf>> {
     let info = GenFileInfo::from(target);
-    let target = target.canonicalize()?;
     let lang = detect_language(&info.ext, langs)?;
 
     // compile
     let dir = TempDir::new()?;
-    for step in lang.compile(&target) {
-        step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(10))?;
+    for step in lang.compile(&target)? {
+        step.execute(
+            &dir,
+            Vec::new(),
+            Stdio::null(),
+            Stdio::null(),
+            Duration::from_secs(10),
+        )?;
     }
 
     // generate
@@ -98,8 +103,14 @@ fn generate(
         let output_path = outdir.join(output_name);
         let output = File::create(&output_path).unwrap();
 
-        lang.run(&target, seed + i as u32)
-            .execute(&dir, Stdio::null(), output, Duration::from_secs(10))
+        lang.run(&target)?
+            .execute(
+                &dir,
+                vec![(seed + i as u32).to_string()],
+                Stdio::null(),
+                output,
+                Duration::from_secs(10),
+            )
             .with_context(|| format!("failed to generate {:?} at seed = {:?}", target, seed + i))?;
 
         generated_cases.push(output_path.to_path_buf());
