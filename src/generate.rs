@@ -6,7 +6,7 @@ use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -72,15 +72,14 @@ impl From<&Path> for GenFileInfo {
     }
 }
 
+/// 生成されたテストケースへのパスを返す
 fn generate(
     target: &Path,
     outdir: &Path,
     count: u32,
     seed: u32,
     langs: &Vec<Box<dyn Language>>,
-) -> Result<(Vec<PathBuf>, Duration)> {
-    let now = Instant::now();
-
+) -> Result<Vec<PathBuf>> {
     let info = GenFileInfo::from(target);
     let target = target.canonicalize()?;
     let lang = detect_language(&info.ext, langs)?;
@@ -106,7 +105,7 @@ fn generate(
         generated_cases.push(output_path.to_path_buf());
     }
 
-    Ok((generated_cases, now.elapsed()))
+    Ok(generated_cases)
 }
 
 pub(super) fn root(args: GenerateArgs) -> Result<()> {
@@ -146,10 +145,10 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
 
     let mut cases = Vec::new();
     for target in generators {
-        if let Ok((mut sub_cases, elapsed_time)) =
+        if let Ok(mut sub_cases) =
             generate(&target, &args.outdir, args.count, args.seed, &langs)
         {
-            println!("[GENERATED] {:?}: elapsed_time {:?}", target, elapsed_time);
+            println!("[GENERATED] {:?}", target);
             cases.append(&mut sub_cases);
         } else {
             println!("[IGNORED] {:?}", target);
