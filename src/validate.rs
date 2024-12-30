@@ -39,7 +39,7 @@ pub(super) struct ValidateArgs {
     language: Vec<String>,
 }
 
-/// vaildate の結果とエラー出力を返す
+/// vaildate の結果とエラー出力先パスを返す
 fn validate<P: AsRef<Path>>(
     current_dir: P,
     target: &Path,
