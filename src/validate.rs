@@ -1,6 +1,6 @@
 use crate::language::{default_languages, detect_language, CommandStep, CustomLang};
 use crate::utils::find_files;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -135,14 +135,4 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test() {
-        todo!();
-    }
 }
