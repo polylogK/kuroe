@@ -1,10 +1,9 @@
 use anyhow::{bail, ensure, Context, Result};
+use regex::Regex;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
-
-use regex::Regex;
 
 #[derive(Debug)]
 pub(crate) struct CommandStep {

@@ -1,14 +1,13 @@
 use crate::language::{default_languages, detect_language, CommandStep, CustomLang};
 use crate::utils::find_files;
 use anyhow::{bail, Context, Result};
+use clap::Args;
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tempfile::TempDir;
-
-use clap::Args;
 
 #[derive(Debug, Args)]
 pub(super) struct ValidateArgs {
@@ -17,7 +16,13 @@ pub(super) struct ValidateArgs {
     testcases: Vec<PathBuf>,
 
     /// path to the validator
-    #[arg(short, long, value_name = "VALIDATOR", required = true)]
+    #[arg(
+        visible_alias = "code",
+        short,
+        long,
+        value_name = "VALIDATOR",
+        required = true
+    )]
     validator: PathBuf,
 
     /// recursively search for testcases
@@ -39,7 +44,7 @@ pub(super) struct ValidateArgs {
     language: Vec<String>,
 }
 
-/// vaildate の結果とエラー出力を返す
+/// vaildate の結果とエラー出力先パスを返す
 fn validate<P: AsRef<Path>>(
     current_dir: P,
     target: &Path,
@@ -106,7 +111,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
             let ext = args
                 .validator
                 .extension()
-                .unwrap()
+                .with_context(|| format!("{:?} is not found", args.validator))?
                 .to_string_lossy()
                 .to_string();
             detect_language(&ext, &langs)?
@@ -135,14 +140,4 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test() {
-        todo!();
-    }
 }
