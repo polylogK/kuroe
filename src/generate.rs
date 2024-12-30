@@ -1,6 +1,4 @@
-use crate::language::{
-    default_languages, detect_language, Clang, Cpp, CustomLang, Language, Python, Txt,
-};
+use crate::language::{default_languages, detect_language, CustomLang, Language};
 use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
