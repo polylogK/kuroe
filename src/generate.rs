@@ -1,4 +1,6 @@
-use crate::language::{detect_language, Clang, Cpp, CustomLang, Language, Python, Txt};
+use crate::language::{
+    default_languages, detect_language, Clang, Cpp, CustomLang, Language, Python, Txt,
+};
 use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
@@ -133,23 +135,14 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         generators
     };
 
-    let langs: Vec<Box<dyn Language>> = if args.language.len() == 0 {
-        vec![
-            Box::new(Clang),
-            Box::new(Cpp),
-            Box::new(Python),
-            Box::new(Txt),
-        ]
+    let langs = if args.language.len() == 0 {
+        default_languages()
     } else {
+        let mut langs = default_languages();
         let custom_lang =
             CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
-        vec![
-            Box::new(custom_lang),
-            Box::new(Clang),
-            Box::new(Cpp),
-            Box::new(Python),
-            Box::new(Txt),
-        ]
+        langs.insert(0, Box::new(custom_lang));
+        langs
     };
 
     if !args.outdir.exists() {

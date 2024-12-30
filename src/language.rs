@@ -181,6 +181,15 @@ impl Language for CustomLang {
     }
 }
 
+pub(crate) fn default_languages() -> Vec<Box<dyn Language + 'static>> {
+    vec![
+        Box::new(Clang),
+        Box::new(Cpp),
+        Box::new(Python),
+        Box::new(Txt),
+    ]
+}
+
 /// langs から ext に合った Language をクローンして返す
 /// 複数の言語に合致する場合は先頭に近いものが優先される
 /// カスタム言語で ext が被った場合はカスタム言語を先頭にすることで上書きすることが可能
