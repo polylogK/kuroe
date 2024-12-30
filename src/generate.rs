@@ -91,6 +91,7 @@ fn generate(
             Vec::new(),
             Stdio::null(),
             Stdio::null(),
+            Stdio::null(),
             Duration::from_secs(10),
         )?;
     }
@@ -109,6 +110,7 @@ fn generate(
                 vec![(seed + i as u32).to_string()],
                 Stdio::null(),
                 output,
+                Stdio::null(),
                 Duration::from_secs(10),
             )
             .with_context(|| format!("failed to generate {:?} at seed = {:?}", target, seed + i))?;
