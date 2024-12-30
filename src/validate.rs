@@ -33,6 +33,10 @@ pub(super) struct ValidateArgs {
     #[arg(short, long, default_value = "./testcases/validate")]
     outdir: PathBuf,
 
+    /// do not save the error outputs
+    #[arg(short, long, default_value_t = false)]
+    quiet: bool,
+
     /// COMMAND[0:-1] are the compile commands. COMMAND[-1] is execute command
     #[arg(
         short,
@@ -50,24 +54,40 @@ fn validate<P: AsRef<Path>>(
     target: &Path,
     outdir: &Path,
     run: &CommandStep,
+    quiet: bool,
 ) -> Result<(bool, PathBuf)> {
     let input = File::open(&target)?;
-
     let name = target.file_stem().unwrap().to_string_lossy().to_string();
-    let err_path = outdir.join(format!("{name}.val"));
-    let err = File::create(&err_path)?;
 
-    if let Ok(status) = run.execute(
-        current_dir,
-        Vec::new(),
-        input,
-        Stdio::null(),
-        err,
-        Duration::from_secs(10),
-    ) {
-        Ok((status.success(), err_path.into()))
+    if quiet {
+        if let Ok(status) = run.execute(
+            current_dir,
+            Vec::new(),
+            input,
+            Stdio::null(),
+            Stdio::null(),
+            Duration::from_secs(10),
+        ) {
+            Ok((status.success(), "".into()))
+        } else {
+            bail!("failed to run")
+        }
     } else {
-        bail!("failed to run")
+        let err_path = outdir.join(format!("{name}.val"));
+        let err = File::create(&err_path)?;
+
+        if let Ok(status) = run.execute(
+            current_dir,
+            Vec::new(),
+            input,
+            Stdio::null(),
+            err,
+            Duration::from_secs(10),
+        ) {
+            Ok((status.success(), err_path.into()))
+        } else {
+            bail!("failed to run")
+        }
     }
 }
 
@@ -100,7 +120,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         langs
     };
 
-    if !args.outdir.exists() {
+    if args.quiet && !args.outdir.exists() {
         create_dir_all(&args.outdir)?;
     }
 
@@ -132,7 +152,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
     };
 
     for target in testcases {
-        if let Ok((status, _)) = validate(&dir, &target, &args.outdir, &runstep) {
+        if let Ok((status, _)) = validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
             println!("[VALIDATED] {:?}, status = {:?}", target, status);
         } else {
             println!("[IGNORED] {:?}", target);
