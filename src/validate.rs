@@ -16,7 +16,13 @@ pub(super) struct ValidateArgs {
     testcases: Vec<PathBuf>,
 
     /// path to the validator
-    #[arg(short, long, value_name = "VALIDATOR", required = true)]
+    #[arg(
+        visible_alias = "code",
+        short,
+        long,
+        value_name = "VALIDATOR",
+        required = true
+    )]
     validator: PathBuf,
 
     /// recursively search for testcases
