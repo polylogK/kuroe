@@ -1,14 +1,13 @@
 use crate::language::{default_languages, detect_language, CommandStep, CustomLang};
 use crate::utils::find_files;
 use anyhow::{bail, Result};
+use clap::Args;
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tempfile::TempDir;
-
-use clap::Args;
 
 #[derive(Debug, Args)]
 pub(super) struct ValidateArgs {
