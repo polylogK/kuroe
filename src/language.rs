@@ -1,6 +1,6 @@
 use anyhow::{bail, ensure, Context, Result};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
@@ -17,20 +17,22 @@ impl CommandStep {
         Self { program, args }
     }
 
-    pub(crate) fn execute<P: AsRef<Path>, T: Into<Stdio>, U: Into<Stdio>>(
+    pub(crate) fn execute<P: AsRef<Path>, T: Into<Stdio>, U: Into<Stdio>, V: Into<Stdio>>(
         &self,
         current_dir: P,
         additional_args: Vec<String>,
         stdin: T,
         stdout: U,
+        stderr: V,
         time_limit: Duration,
-    ) -> Result<()> {
+    ) -> Result<ExitStatus> {
         let args = [&self.args[..], &additional_args[..]].concat();
         let mut child = Command::new(&self.program)
             .args(args)
             .current_dir(current_dir)
             .stdin(stdin)
             .stdout(stdout)
+            .stderr(stderr)
             .spawn()
             .with_context(|| format!("Failed to execute {:?}", self))?;
 
@@ -42,10 +44,7 @@ impl CommandStep {
                 child.wait().unwrap()
             }
         };
-        if !status.success() {
-            bail!("Failed to execute {:?} with status {:?}", self, status);
-        }
-        Ok(())
+        Ok(status)
     }
 }
 
@@ -210,20 +209,24 @@ mod tests {
                 Vec::new(),
                 Stdio::null(),
                 Stdio::null(),
+                Stdio::null(),
                 Duration::from_secs(1)
             )
-            .is_ok());
+            .unwrap()
+            .success());
 
         let step = CommandStep::new("false".to_string(), Vec::new());
-        assert!(step
+        assert!(!step
             .execute(
                 "./",
                 Vec::new(),
                 Stdio::null(),
                 Stdio::null(),
+                Stdio::null(),
                 Duration::from_secs(1)
             )
-            .is_err());
+            .unwrap()
+            .success());
     }
 
     #[test]
@@ -300,6 +303,7 @@ mod tests {
             Vec::new(),
             Stdio::null(),
             hello,
+            Stdio::null(),
             Duration::from_secs(2),
         )
         .unwrap();
@@ -309,6 +313,7 @@ mod tests {
             step.execute(
                 &dir,
                 Vec::new(),
+                Stdio::null(),
                 Stdio::null(),
                 Stdio::null(),
                 Duration::from_secs(2),
@@ -326,6 +331,7 @@ mod tests {
                 Vec::new(),
                 Stdio::null(),
                 output,
+                Stdio::null(),
                 Duration::from_secs(2),
             )
             .unwrap();
@@ -347,6 +353,7 @@ mod tests {
                 Vec::new(),
                 Stdio::null(),
                 hello,
+                Stdio::null(),
                 Duration::from_secs(2),
             )
             .unwrap();
@@ -356,6 +363,7 @@ mod tests {
             step.execute(
                 &dir,
                 Vec::new(),
+                Stdio::null(),
                 Stdio::null(),
                 Stdio::null(),
                 Duration::from_secs(2),
@@ -373,6 +381,7 @@ mod tests {
                 Vec::new(),
                 Stdio::null(),
                 output,
+                Stdio::null(),
                 Duration::from_secs(2),
             )
             .unwrap();
@@ -399,7 +408,7 @@ mod tests {
             "echo".to_string(),
             vec!["#include <cstdio>\nint main(int argc, char *argv[]) { printf(\"hello %s\", argv[1]); }".to_string()],
         )
-        .execute(&dir, Vec::new(), Stdio::null(), hello, Duration::from_secs(2))
+        .execute(&dir, Vec::new(), Stdio::null(), hello,Stdio::null(),  Duration::from_secs(2))
         .unwrap();
 
         // コンパイル
@@ -407,6 +416,7 @@ mod tests {
             step.execute(
                 &dir,
                 Vec::new(),
+                Stdio::null(),
                 Stdio::null(),
                 Stdio::null(),
                 Duration::from_secs(2),
@@ -424,6 +434,7 @@ mod tests {
                 vec!["0".to_string()],
                 Stdio::null(),
                 output,
+                Stdio::null(),
                 Duration::from_secs(2),
             )
             .unwrap();
