@@ -92,3 +92,4 @@ kuroe はデフォルトでは C++ のコンパイルに g++ を利用します�
 - <https://rime.readthedocs.io/ja/latest/>
 - <https://github.com/terry-u16/pahcer>
 - <https://github.com/riantkb/testlib_for_yukicoder>
+- <https://github.com/MikeMirzayanov/testlib/tree/master>

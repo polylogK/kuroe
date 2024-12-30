@@ -41,7 +41,7 @@ fn main() {
             generate::root(args).expect("failed to generate");
         }
         Commands::Validate(args) => {
-            println!("Validate {args:?}");
+            validate::root(args).expect("failed to validate");
         }
         Commands::Solve(args) => {
             println!("Solve {args:?}");

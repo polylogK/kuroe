@@ -1,4 +1,4 @@
-use crate::language::{detect_language, Clang, Cpp, CustomLang, Language, Python, Txt};
+use crate::language::{default_languages, detect_language, CustomLang, Language};
 use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
@@ -6,7 +6,7 @@ use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -72,23 +72,28 @@ impl From<&Path> for GenFileInfo {
     }
 }
 
+/// 生成されたテストケースへのパスを返す
 fn generate(
     target: &Path,
     outdir: &Path,
     count: u32,
     seed: u32,
     langs: &Vec<Box<dyn Language>>,
-) -> Result<(Vec<PathBuf>, Duration)> {
-    let now = Instant::now();
-
+) -> Result<Vec<PathBuf>> {
     let info = GenFileInfo::from(target);
-    let target = target.canonicalize()?;
     let lang = detect_language(&info.ext, langs)?;
 
     // compile
     let dir = TempDir::new()?;
-    for step in lang.compile(&target) {
-        step.execute(&dir, Stdio::null(), Stdio::null(), Duration::from_secs(10))?;
+    for step in lang.compile(&target)? {
+        step.execute(
+            &dir,
+            Vec::new(),
+            Stdio::null(),
+            Stdio::null(),
+            Stdio::null(),
+            Duration::from_secs(10),
+        )?;
     }
 
     // generate
@@ -99,14 +104,21 @@ fn generate(
         let output_path = outdir.join(output_name);
         let output = File::create(&output_path).unwrap();
 
-        lang.run(&target, seed + i as u32)
-            .execute(&dir, Stdio::null(), output, Duration::from_secs(10))
+        lang.run(&target)?
+            .execute(
+                &dir,
+                vec![(seed + i as u32).to_string()],
+                Stdio::null(),
+                output,
+                Stdio::null(),
+                Duration::from_secs(10),
+            )
             .with_context(|| format!("failed to generate {:?} at seed = {:?}", target, seed + i))?;
 
         generated_cases.push(output_path.to_path_buf());
     }
 
-    Ok((generated_cases, now.elapsed()))
+    Ok(generated_cases)
 }
 
 pub(super) fn root(args: GenerateArgs) -> Result<()> {
@@ -121,23 +133,14 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         generators
     };
 
-    let langs: Vec<Box<dyn Language>> = if args.language.len() == 0 {
-        vec![
-            Box::new(Clang),
-            Box::new(Cpp),
-            Box::new(Python),
-            Box::new(Txt),
-        ]
+    let langs = if args.language.len() == 0 {
+        default_languages()
     } else {
+        let mut langs = default_languages();
         let custom_lang =
             CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
-        vec![
-            Box::new(custom_lang),
-            Box::new(Clang),
-            Box::new(Cpp),
-            Box::new(Python),
-            Box::new(Txt),
-        ]
+        langs.insert(0, Box::new(custom_lang));
+        langs
     };
 
     if !args.outdir.exists() {
@@ -146,10 +149,8 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
 
     let mut cases = Vec::new();
     for target in generators {
-        if let Ok((mut sub_cases, elapsed_time)) =
-            generate(&target, &args.outdir, args.count, args.seed, &langs)
-        {
-            println!("[GENERATED] {:?}: elapsed_time {:?}", target, elapsed_time);
+        if let Ok(mut sub_cases) = generate(&target, &args.outdir, args.count, args.seed, &langs) {
+            println!("[GENERATED] {:?}", target);
             cases.append(&mut sub_cases);
         } else {
             println!("[IGNORED] {:?}", target);
