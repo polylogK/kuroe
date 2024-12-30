@@ -1,6 +1,6 @@
 use crate::language::{default_languages, detect_language, CommandStep, CustomLang};
 use crate::utils::find_files;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Args;
 use regex::Regex;
 use std::fs::{create_dir_all, File};
@@ -111,7 +111,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
             let ext = args
                 .validator
                 .extension()
-                .unwrap()
+                .with_context(|| format!("{:?} is not found", args.validator))?
                 .to_string_lossy()
                 .to_string();
             detect_language(&ext, &langs)?
