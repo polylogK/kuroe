@@ -44,7 +44,7 @@ fn main() {
             validate::root(args).expect("failed to validate");
         }
         Commands::Solve(args) => {
-            println!("Solve {args:?}");
+            solve::root(args).expect("failed to solve");
         }
         Commands::Judge(args) => {
             println!("Judge {args:?}");
