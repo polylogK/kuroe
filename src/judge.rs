@@ -1,4 +1,6 @@
-use crate::language::{compile_and_get_runstep, default_languages, CommandStep, CustomLang};
+use crate::language::{
+    compile_and_get_runstep, default_languages, CommandStep, CustomLang, ExecuteStatus,
+};
 use crate::utils::find_files;
 use anyhow::{bail, Result};
 use clap::Args;
@@ -6,7 +8,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
-use std::process::{ExitStatus, Stdio};
+use std::process::Stdio;
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -117,7 +119,7 @@ fn solve<P: AsRef<Path>>(
     outdir: &Path,
     run: &CommandStep,
     timelimit: f64,
-) -> Result<(ExitStatus, PathBuf)> {
+) -> Result<(ExecuteStatus, PathBuf)> {
     let input = File::open(&target)?;
 
     let name = target.file_stem().unwrap().to_string_lossy().to_string();

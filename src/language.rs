@@ -6,14 +6,50 @@ use std::time::Duration;
 use wait_timeout::ChildExt;
 
 #[derive(Debug)]
+pub(crate) enum ExecuteStatus {
+    Success,
+    TimeLimitExceed,
+    Fail,
+}
+
+impl ExecuteStatus {
+    pub fn success(&self) -> bool {
+        matches!(self, ExecuteStatus::Success)
+    }
+}
+
+impl From<ExitStatus> for ExecuteStatus {
+    fn from(status: ExitStatus) -> ExecuteStatus {
+        if status.success() {
+            ExecuteStatus::Success
+        } else {
+            ExecuteStatus::Fail
+        }
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct CommandStep {
     program: String,
     args: Vec<String>,
+    ignore_additional_args: bool,
 }
 
 impl CommandStep {
     pub(crate) fn new(program: String, args: Vec<String>) -> Self {
-        Self { program, args }
+        Self {
+            program,
+            args,
+            ignore_additional_args: true,
+        }
+    }
+
+    pub(crate) fn new_ignore_additional_args(program: String, args: Vec<String>) -> Self {
+        Self {
+            program,
+            args,
+            ignore_additional_args: false,
+        }
     }
 
     pub(crate) fn execute<P: AsRef<Path>, T: Into<Stdio>, U: Into<Stdio>, V: Into<Stdio>>(
@@ -24,8 +60,13 @@ impl CommandStep {
         stdout: U,
         stderr: V,
         time_limit: Duration,
-    ) -> Result<ExitStatus> {
-        let args = [&self.args[..], &additional_args[..]].concat();
+    ) -> Result<ExecuteStatus> {
+        let args = if self.ignore_additional_args {
+            [&self.args[..], &additional_args[..]].concat()
+        } else {
+            self.args.clone()
+        };
+
         let mut child = Command::new(&self.program)
             .args(args)
             .current_dir(current_dir)
@@ -36,11 +77,12 @@ impl CommandStep {
             .with_context(|| format!("Failed to execute {:?}", self))?;
 
         let status = match child.wait_timeout(time_limit)? {
-            Some(status) => status,
+            Some(status) => ExecuteStatus::from(status),
             None => {
                 // child hasn't exited yet
                 child.kill().unwrap();
-                child.wait().unwrap()
+                child.wait().unwrap();
+                ExecuteStatus::TimeLimitExceed
             }
         };
         Ok(status)
@@ -126,9 +168,11 @@ impl Language for Txt {
     }
 
     fn run(&self, target: &Path) -> Result<CommandStep> {
-        Ok(CommandStep::new(
+        Ok(CommandStep::new_ignore_additional_args(
             "cat".to_string(),
-            vec![target.canonicalize()?.to_string_lossy().to_string()],
+            vec![
+                target.canonicalize()?.to_string_lossy().to_string(),
+            ],
         ))
     }
 }
@@ -238,6 +282,13 @@ mod tests {
     use super::*;
     use std::fs::{read_to_string, File};
     use tempfile::tempdir;
+
+    #[test]
+    fn test_execute_status() {
+        assert!(ExecuteStatus::Success.success());
+        assert!(!ExecuteStatus::TimeLimitExceed.success());
+        assert!(!ExecuteStatus::Fail.success());
+    }
 
     #[test]
     fn test_execute() {
