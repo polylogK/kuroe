@@ -47,7 +47,7 @@ fn main() {
             solve::root(args).expect("failed to solve");
         }
         Commands::Judge(args) => {
-            println!("Judge {args:?}");
+            judge::root(args).expect("failed to judge");
         }
     }
 }
