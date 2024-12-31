@@ -5,7 +5,7 @@ use clap::Args;
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 
@@ -55,7 +55,7 @@ fn validate<P: AsRef<Path>>(
     outdir: &Path,
     run: &CommandStep,
     quiet: bool,
-) -> Result<(bool, PathBuf)> {
+) -> Result<(ExitStatus, PathBuf)> {
     let input = File::open(&target)?;
     let name = target.file_stem().unwrap().to_string_lossy().to_string();
 
@@ -68,7 +68,7 @@ fn validate<P: AsRef<Path>>(
             Stdio::null(),
             Duration::from_secs(10),
         ) {
-            Ok((status.success(), "".into()))
+            Ok((status, "".into()))
         } else {
             bail!("failed to run")
         }
@@ -84,7 +84,7 @@ fn validate<P: AsRef<Path>>(
             err,
             Duration::from_secs(10),
         ) {
-            Ok((status.success(), err_path.into()))
+            Ok((status, err_path.into()))
         } else {
             bail!("failed to run")
         }
