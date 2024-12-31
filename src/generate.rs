@@ -1,4 +1,6 @@
-use crate::language::{compile_and_get_runstep, default_languages, CustomLang, Language};
+use crate::language::{
+    compile_and_get_runstep, default_languages, CustomLang, ExecuteStatus, Language,
+};
 use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
@@ -32,6 +34,10 @@ pub(super) struct GenerateArgs {
     #[arg(short, long, default_value_t = 0, required = false
     , value_parser = clap::value_parser!(u32).range(0..))]
     seed: u32,
+
+    /// timelimit for generating answer
+    #[arg(visible_alias = "tl", long, default_value_t = 10.0)]
+    timelimit: f64,
 
     /// COMMAND[0:-1] are the compile commands. COMMAND[-1] is execute command
     #[arg(
@@ -79,8 +85,9 @@ fn generate(
     outdir: &Path,
     count: u32,
     seed: u32,
+    timelimit: f64,
     langs: &Vec<Box<dyn Language>>,
-) -> Result<Vec<PathBuf>> {
+) -> Result<Vec<(ExecuteStatus, PathBuf)>> {
     let info = GenFileInfo::new(target)?;
 
     // compile
@@ -95,18 +102,18 @@ fn generate(
         let output_path = outdir.join(output_name);
         let output = File::create(&output_path).unwrap();
 
-        runstep
+        let status = runstep
             .execute(
                 &dir,
                 vec![(seed + i as u32).to_string()],
                 Stdio::null(),
                 output,
                 Stdio::null(),
-                Duration::from_secs(10),
+                Duration::from_secs_f64(timelimit),
             )
             .with_context(|| format!("failed to generate {:?} at seed = {:?}", target, seed + i))?;
 
-        generated_cases.push(output_path.to_path_buf());
+        generated_cases.push((status, output_path.to_path_buf()));
     }
 
     Ok(generated_cases)
@@ -138,11 +145,18 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         create_dir_all(&args.outdir)?;
     }
 
-    let mut cases = Vec::new();
     for target in generators {
-        if let Ok(mut sub_cases) = generate(&target, &args.outdir, args.count, args.seed, &langs) {
-            println!("[GENERATED] {:?}", target);
-            cases.append(&mut sub_cases);
+        if let Ok(sub_cases) = generate(
+            &target,
+            &args.outdir,
+            args.count,
+            args.seed,
+            args.timelimit,
+            &langs,
+        ) {
+            for (status, case) in sub_cases {
+                println!("[GENERATED] {case:?}, status = {status:?}");
+            }
         } else {
             println!("[IGNORED] {:?}", target);
         }
