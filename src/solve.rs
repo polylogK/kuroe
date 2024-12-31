@@ -1,6 +1,6 @@
-use crate::language::{default_languages, detect_language, CommandStep, CustomLang};
+use crate::language::{compile_and_get_runstep, default_languages, CommandStep, CustomLang};
 use crate::utils::find_files;
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{bail, ensure, Result};
 use clap::Args;
 use regex::Regex;
 use std::fs::{create_dir_all, File};
@@ -111,33 +111,8 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         create_dir_all(&args.outdir)?;
     }
 
-    // solver コンパイル
     let dir = TempDir::new()?;
-    let runstep = {
-        let lang = {
-            let ext = args
-                .solver
-                .extension()
-                .with_context(|| format!("{:?} is not found", args.solver))?
-                .to_string_lossy()
-                .to_string();
-            detect_language(&ext, &langs)?
-        };
-
-        for step in lang.compile(&args.solver)? {
-            step.execute(
-                &dir,
-                Vec::new(),
-                Stdio::null(),
-                Stdio::null(),
-                Stdio::null(),
-                Duration::from_secs(10),
-            )?;
-        }
-
-        lang.run(&args.solver)?
-    };
-
+    let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
     for target in testcases {
         if let Ok(answer) = solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
             println!("[SOLVED] {:?}", answer);

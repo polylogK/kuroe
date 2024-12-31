@@ -204,9 +204,40 @@ pub(crate) fn detect_language<'a>(
     bail!("no language detected");
 }
 
+/// target を compile して runstep を返す
+pub(crate) fn compile_and_get_runstep<P: AsRef<Path>>(
+    current_dir: P,
+    target: &Path,
+    langs: &Vec<Box<dyn Language>>,
+) -> Result<CommandStep> {
+    let lang = {
+        let ext = target
+            .extension()
+            .with_context(|| format!("{:?} is not found", target))?
+            .to_string_lossy()
+            .to_string();
+        detect_language(&ext, &langs)?
+    };
+
+    for step in lang.compile(&target)? {
+        step.execute(
+            &current_dir,
+            Vec::new(),
+            Stdio::null(),
+            Stdio::null(),
+            Stdio::null(),
+            Duration::from_secs(10),
+        )?;
+    }
+
+    lang.run(&target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::{read_to_string, File};
+    use tempfile::tempdir;
 
     #[test]
     fn test_execute() {
@@ -291,8 +322,17 @@ mod tests {
         assert!(lang.is_err());
     }
 
-    use std::fs::{read_to_string, File};
-    use tempfile::tempdir;
+    #[test]
+    fn test_compile_and_get_runstep() {
+        let langs: Vec<Box<dyn Language>> = vec![Box::new(Cpp), Box::new(Txt)];
+        let temp_dir = tempdir().unwrap();
+        let temp_file = temp_dir.path().join("test.txt");
+        let _ = File::create(&temp_file).unwrap();
+
+        let runstep = compile_and_get_runstep(Path::new("./"), &temp_file, &langs).unwrap();
+        assert_eq!(runstep.program, "cat".to_string());
+        assert_eq!(runstep.args.len(), 1);
+    }
 
     #[test]
     fn test_compile_and_run_cpp() {

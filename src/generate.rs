@@ -1,4 +1,4 @@
-use crate::language::{default_languages, detect_language, CustomLang, Language};
+use crate::language::{compile_and_get_runstep, default_languages, CustomLang, Language};
 use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
@@ -48,27 +48,28 @@ pub(super) struct GenerateArgs {
 struct GenFileInfo {
     name: String,
     count: Option<u32>,
-    ext: String,
 }
 
-impl From<&Path> for GenFileInfo {
+impl GenFileInfo {
     /// hoge.{count}.ext を解釈する
     /// count が u32 としてパースできる場合は name = "hoge"
     /// count が u32 としてパースできない場合は name = "hoge.{count}"
-    fn from(path: &Path) -> Self {
-        let ext = path.extension().unwrap().to_string_lossy().to_string();
+    fn new(path: &Path) -> Result<Self> {
         let stem = path.file_stem().unwrap().to_string_lossy().to_string();
 
         // count の解決
         let parts: Vec<&str> = stem.rsplitn(2, '.').collect();
         let count = parts.get(0).and_then(|s| s.parse::<u32>().ok());
         let name = if count.is_some() {
-            parts.get(1).map(|s| s.to_string()).unwrap()
+            parts
+                .get(1)
+                .map(|s| s.to_string())
+                .with_context(|| format!("{path:?} is invalid form!"))?
         } else {
             stem
         };
 
-        GenFileInfo { name, count, ext }
+        Ok(GenFileInfo { name, count })
     }
 }
 
@@ -80,21 +81,11 @@ fn generate(
     seed: u32,
     langs: &Vec<Box<dyn Language>>,
 ) -> Result<Vec<PathBuf>> {
-    let info = GenFileInfo::from(target);
-    let lang = detect_language(&info.ext, langs)?;
+    let info = GenFileInfo::new(target)?;
 
     // compile
     let dir = TempDir::new()?;
-    for step in lang.compile(&target)? {
-        step.execute(
-            &dir,
-            Vec::new(),
-            Stdio::null(),
-            Stdio::null(),
-            Stdio::null(),
-            Duration::from_secs(10),
-        )?;
-    }
+    let runstep = compile_and_get_runstep(&dir, &target, &langs)?;
 
     // generate
     let count = info.count.unwrap_or(count);
@@ -104,7 +95,7 @@ fn generate(
         let output_path = outdir.join(output_name);
         let output = File::create(&output_path).unwrap();
 
-        lang.run(&target)?
+        runstep
             .execute(
                 &dir,
                 vec![(seed + i as u32).to_string()],
@@ -166,20 +157,15 @@ mod tests {
 
     #[test]
     fn test_genfileinfo() {
-        let info = GenFileInfo::from(Path::new("dir/test.0.nocount.ext"));
+        let info = GenFileInfo::new(Path::new("dir/test.0.nocount.ext")).unwrap();
         assert_eq!(info.name, String::from("test.0.nocount"));
         assert_eq!(info.count, None);
-        assert_eq!(info.ext, String::from("ext"));
 
-        let info = GenFileInfo::from(Path::new("test.5.ext"));
+        let info = GenFileInfo::new(Path::new("test.5.ext")).unwrap();
         assert_eq!(info.name, String::from("test"));
         assert_eq!(info.count, Some(5));
-        assert_eq!(info.ext, String::from("ext"));
-    }
 
-    #[test]
-    #[should_panic]
-    fn test_genfileinfo_panic() {
-        let _ = GenFileInfo::from(Path::new("0.ext"));
+        let info = GenFileInfo::new(Path::new("0.ext"));
+        assert!(info.is_err());
     }
 }

@@ -1,6 +1,6 @@
-use crate::language::{default_languages, detect_language, CommandStep, CustomLang};
+use crate::language::{compile_and_get_runstep, default_languages, CommandStep, CustomLang};
 use crate::utils::find_files;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use clap::Args;
 use regex::Regex;
 use std::fs::{create_dir_all, File};
@@ -124,33 +124,8 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         create_dir_all(&args.outdir)?;
     }
 
-    // validator コンパイル
     let dir = TempDir::new()?;
-    let runstep = {
-        let lang = {
-            let ext = args
-                .validator
-                .extension()
-                .with_context(|| format!("{:?} is not found", args.validator))?
-                .to_string_lossy()
-                .to_string();
-            detect_language(&ext, &langs)?
-        };
-
-        for step in lang.compile(&args.validator)? {
-            step.execute(
-                &dir,
-                Vec::new(),
-                Stdio::null(),
-                Stdio::null(),
-                Stdio::null(),
-                Duration::from_secs(10),
-            )?;
-        }
-
-        lang.run(&args.validator)?
-    };
-
+    let runstep = compile_and_get_runstep(&dir, &args.validator, &langs)?;
     for target in testcases {
         if let Ok((status, _)) = validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
             println!("[VALIDATED] {:?}, status = {:?}", target, status);
