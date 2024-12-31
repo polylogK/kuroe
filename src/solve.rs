@@ -34,7 +34,7 @@ pub(super) struct SolveArgs {
     outdir: PathBuf,
 
     /// timelimit for generating answer
-    #[arg(short, long, default_value_t = 10.0)]
+    #[arg(visible_alias = "tl", long, default_value_t = 10.0)]
     timelimit: f64,
 
     /// COMMAND[0:-1] are the compile commands. COMMAND[-1] is execute command
