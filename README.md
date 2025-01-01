@@ -10,62 +10,85 @@ kuroe では，テストケース生成・バリデーション・想定解生�
 生成ケース数はオプションで指定可能ですが，ファイル名で指定することも可能です。`kuroe.5.cpp` のようにジェネレータの拡張子の直前に数字が指定されている場合は，その数字の個数だけ生成されます（この場合 5 個）。
 
 ```bash
-kuroe generate main.py -n 5 # 5 個のテストケースが生成される
-kuroe generate ./gendir/ -r # gendir 以下のすべてのジェネレータで生成される
+kuroe generate main.py -n 5 # シード 0 から 4 で 5 個生成
+kuroe generate ./example/generator # ./example/generator 内の全ジェネレータで生成
 ```
 
 - 引数
   - `generators`：ジェネレータを含むディレクトリ or ジェネレータへのパス（複数可能）
 - オプション
-  - `-r`, `--recursive`：再帰的にジェネレータを探索するかどうか
-  - `-n`, `--count`：ファイルごとに n 個生成する。デフォルトは 1。ただしファイル名で指定されている場合はファイル名が優先。
+  - `-r`, `--recursive`：再帰的にジェネレータを探索するかどうか。
   - `-o`, `--outdir`：出力先ディレクトリ。デフォルトは `./testcases/input`
+  - `-n`, `--count`：ファイルごとに n 個生成する。デフォルトは 1。ただしファイル名で指定されている場合はファイル名が優先。
   - `-s`, `--seed`：seed, seed+1, ..., seed+(n-1)。デフォルトは 0
+  - `--tl`, `--timelimit`：生成のタイムリミット（秒）。デフォルトは 10.0
   - `-l`, `--language`：カスタム言語
 - 出力
   - `outdir` に入力が生成される
 
+### 補足
+
+ジェネレータの実行では `./a.out 0` のように `seed` が渡されます。
+
 ## サブコマンド：validate
 
-TODO：実装
+テストケースを検証します。
+`testlib.h` による `validator` を想定しています。
+
+```bash
+kuroe validate example/validator.cpp
+```
 
 - 引数
   - `validator`：検証器へのパス（1 つ）
-  - `testcase`：テストケースを含むディレクトリ or テストケースへのパス（複数可能）
 - オプション
+  - `-t`, `--testcases`：テストケースを含むディレクトリ or テストケースへのパス（複数可能）。デフォルトは `./testcases/input`
   - `-r`, `--recursive`：再帰的にテストケースを探索するかどうか
+  - `-o`, `--outdir`：エラー出力先ディレクトリ。デフォルトは `./testcases/validate`
+  - `-q`, `--quiet`：エラー出力を保存しない。
   - `-l`, `--language`：カスタム言語
 - 出力
-  - バリデーション結果を標準出力に表示
+  - `--quiet` が指定されていない場合，`outdir` にエラー出力が生成される。
 
 ## サブコマンド：solve
 
-TODO：実装
+想定解コードをもとに answer を生成する。
+
+```bash
+kuroe solve example/solver/correct.cpp
+```
 
 - 引数
   - `solver`：想定解へのパス（1 つ）
-  - `testcase`：テストケースを含むディレクトリ or テストケースへのパス（複数可能）
 - オプション
+  - `-t`, `--testcases`：テストケースを含むディレクトリ or テストケースへのパス（複数可能）。デフォルトは `./testcases/input`
   - `-r`, `--recursive`：再帰的にテストケースを探索するかどうか
   - `-o`, `-outdir`：出力先ディレクトリ。デフォルトは `./testcases/answer`
+  - `--tl`, `--timelimit`：生成のタイムリミット（秒）。デフォルトは 10.0
   - `-l`, `--language`：カスタム言語
 - 出力
-  - `outdir` に結果が生成される
+  - `outdir` に answer が生成される
 
 ## サブコマンド：judge
 
-TODO：実装
+コードをジャッジする。
+.in と .ans ファイルが揃っているケースを対象にジャッジする。
 
-備考：浮動小数点ジャッジ・インタラクティブなど未対応。ジャッジコードを指定可能にする予定。
+`testlib.h` による `checker` を使用することができる。
+
+```bash
+kuroe judge example/solver/correct.cpp # 厳密一致によるジャッジ
+kuroe judge example/solver/correct.cpp -c example/checker.cpp # checker によるジャッジ
+```
 
 - 引数
-  - `solver`：ソルバを含むディレクトリ or ソルバへのパス（複数可能）
-  - `testcase`：テストケースを含むディレクトリ（1 つ）。再帰的に探索される。`.in` と `.ans` が揃っているケースのみジャッジ
+  - `solver`：ソルバへのパス（1 つ）
 - オプション
-  - `-o`, `--outdir`：出力先ディレクトリ。デフォルトは `./testcases/output`
-  - `-l`, `--limit`：タイムリミット（秒）。デフォルトは 2 秒
+  - `-t`, `--testcase`：テストケースを含むディレクトリ（1 つ）。`.in` と `.ans` が揃っているケースのみジャッジ。再帰的に探索される。デフォルトは `./testcases`
+  - `-o`, `--outdir`：ソルバ出力先ディレクトリ。デフォルトは `./testcases/output`
+  - `--tl`, `--timelimit`：生成のタイムリミット（秒）。デフォルトは 2.0
 - 出力
-  - `outdir` にソルバごとの結果が格納される
+  - `outdir` にソルバの出力が生成される
 
 ## カスタム言語
 
@@ -74,22 +97,30 @@ kuroe はデフォルトで `C, C++, Python, Txt(txt|in)` に対応していま�
 
 カスタム言語を使用するには `-language`, `-l` オプションを利用して，拡張子（正規表現）・コンパイルコマンド・実行コマンドを `,` で区切り指定します。以下の例を参考にしてください。
 
+複数のカスタム言語を同時に使用することはできません（現時点）。
+
 ### 例 1：clang++ を使用する
 
 kuroe はデフォルトでは C++ のコンパイルに g++ を利用しますが，以下のようなオプションによって clang++ によるコンパイルを行うことが可能です。
 最初の要素が拡張子の指定です。二個目から最終要素の一個前までがコンパイルコマンドの指定，最終要素が実行コマンドの指定となります。
 
-- `-l (cpp|cc),"clang++ %(target)","./a.out %(seed)"`
+- `-l (cpp|cc),"clang++ %(target)","./a.out"`
 
 ### 例 2：pypy を使用する
 
 コンパイルコマンドは省略可能です。
 
-- `-l py,"pypy %(target) %(seed)"`
+- `-l py,"pypy3 %(target)"`
 
 ## リファレンス兼謝辞
 
+`kuroe` 実装にあたり以下を参考にしました。
+
 - <https://rime.readthedocs.io/ja/latest/>
 - <https://github.com/terry-u16/pahcer>
-- <https://github.com/riantkb/testlib_for_yukicoder>
 - <https://github.com/MikeMirzayanov/testlib/tree/master>
+- <https://github.com/riantkb/testlib_for_yukicoder>
+
+## その他？
+
+`creating KyoUpRO problEm tool`
