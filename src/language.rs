@@ -40,7 +40,7 @@ impl CommandStep {
         Self {
             program,
             args,
-            ignore_additional_args: true,
+            ignore_additional_args: false,
         }
     }
 
@@ -48,7 +48,7 @@ impl CommandStep {
         Self {
             program,
             args,
-            ignore_additional_args: false,
+            ignore_additional_args: true,
         }
     }
 
@@ -61,7 +61,7 @@ impl CommandStep {
         stderr: V,
         time_limit: Duration,
     ) -> Result<ExecuteStatus> {
-        let args = if self.ignore_additional_args {
+        let args = if !self.ignore_additional_args {
             [&self.args[..], &additional_args[..]].concat()
         } else {
             self.args.clone()
@@ -170,9 +170,7 @@ impl Language for Txt {
     fn run(&self, target: &Path) -> Result<CommandStep> {
         Ok(CommandStep::new_ignore_additional_args(
             "cat".to_string(),
-            vec![
-                target.canonicalize()?.to_string_lossy().to_string(),
-            ],
+            vec![target.canonicalize()?.to_string_lossy().to_string()],
         ))
     }
 }
