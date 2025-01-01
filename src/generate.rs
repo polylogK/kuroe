@@ -43,7 +43,7 @@ pub(super) struct GenerateArgs {
     #[arg(
         short,
         long,
-        value_name = "<EXT> <COMMAND>...",
+        value_name = "<EXT>,<COMMAND>,...",
         required = false,
         value_delimiter = ','
     )]
