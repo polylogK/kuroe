@@ -11,19 +11,13 @@ use tempfile::TempDir;
 
 #[derive(Debug, Args)]
 pub(super) struct SolveArgs {
-    /// directory containing the testcases or path to the testcase(*.in)
-    #[arg(value_name = "TARGET", required = true)]
-    testcases: Vec<PathBuf>,
-
     /// path to the solver
-    #[arg(
-        visible_alias = "code",
-        short,
-        long,
-        value_name = "SOLVER",
-        required = true
-    )]
+    #[arg(value_name = "SOLVER")]
     solver: PathBuf,
+
+    /// directory containing the testcases or path to the testcase(*.in)
+    #[arg(short, long, default_value = "./testcases/input")]
+    testcases: Vec<PathBuf>,
 
     /// recursively search for testcases
     #[arg(short, long, default_value_t = false)]
@@ -41,7 +35,7 @@ pub(super) struct SolveArgs {
     #[arg(
         short,
         long,
-        value_name = "<EXT> <COMMAND>...",
+        value_name = "<EXT>,<COMMAND>,...",
         required = false,
         value_delimiter = ','
     )]

@@ -31,7 +31,7 @@ pub(super) struct JudgeArgs {
     outdir: PathBuf,
 
     /// timelimit for solver
-    #[arg(visible_alias = "tl", long, default_value_t = 10.0)]
+    #[arg(visible_alias = "tl", long, default_value_t = 2.0)]
     timelimit: f64,
 
     /// judge policy
@@ -41,7 +41,7 @@ pub(super) struct JudgeArgs {
     #[arg(
         short,
         long,
-        value_name = "<EXT> <COMMAND>...",
+        value_name = "<EXT>,<COMMAND>,...",
         required = false,
         value_delimiter = ','
     )]
