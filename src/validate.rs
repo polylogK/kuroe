@@ -1,6 +1,6 @@
-use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus};
+use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus, Language};
 use crate::utils::{find_files, make_languages};
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, Result};
 use clap::Args;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
@@ -15,15 +15,15 @@ use tempfile::TempDir;
 pub(super) struct ValidateArgs {
     /// path to the validator
     #[arg(value_name = "VALIDATOR", required = true)]
-    validator: PathBuf,
+    validators: Vec<PathBuf>,
+
+    /// recursively search for validator
+    #[arg(short, long, default_value_t = false)]
+    recursive: bool,
 
     /// directory containing the testcases or path to the testcase(*.in)
     #[arg(short, long, default_value = "./testcases/input")]
     testcases: Vec<PathBuf>,
-
-    /// recursively search for testcases
-    #[arg(short, long, default_value_t = false)]
-    recursive: bool,
 
     ///
     #[arg(short, long, default_value = "./testcases/validate")]
@@ -87,46 +87,27 @@ fn validate<P: AsRef<Path>>(
     }
 }
 
-pub(super) fn root(args: ValidateArgs) -> Result<()> {
-    info!("{:#?}", args);
-    ensure!(
-        args.validator.exists(),
-        "validator {:?} not found",
-        args.validator
-    );
-
-    let testcases = {
-        let mut testcases = Vec::new();
-        for base in args.testcases {
-            let sub_files = find_files(&base, args.recursive).unwrap();
-
-            for target in sub_files {
-                if let Some(ext) = target.extension() {
-                    if ext == "in" {
-                        testcases.push(target);
-                    }
-                }
-            }
-        }
-        testcases
-    };
-    if testcases.len() == 0 {
-        warn!("no testcases found");
-        return Ok(());
-    }
-    info!("testcases = {testcases:#?}");
-
-    let langs = make_languages(&args.language)?;
-
-    if !args.quiet && !args.outdir.exists() {
-        create_dir_all(&args.outdir)?;
-    }
-
+fn validate_root(
+    validator: &Path,
+    testcases: &Vec<PathBuf>,
+    langs: &Vec<Box<dyn Language>>,
+    outdir: &Path,
+    quiet: bool,
+) -> Result<()> {
     let dir = TempDir::new()?;
-    let runstep = compile_and_get_runstep(&dir, &args.validator, &langs)?;
+    let runstep = compile_and_get_runstep(&dir, validator, langs)?;
+
+    let outdir = outdir.join(validator.file_stem().unwrap().to_str().unwrap());
+    if !quiet && !outdir.exists() {
+        create_dir_all(&outdir)?;
+    }
+
     let bar = ProgressBar::new(testcases.len() as u64);
-    bar.set_style(ProgressStyle::default_bar().template("[Validate] {bar} {pos:>4}/{len:4}")?);
-    if args.quiet {
+    bar.set_style(
+        ProgressStyle::default_bar()
+            .template(&format!("[{validator:?}] {{bar}} {{pos:>4}}/{{len:4}}"))?,
+    );
+    if quiet {
         #[derive(Tabled)]
         struct Result {
             status: String,
@@ -135,7 +116,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         let mut results = Vec::new();
 
         for target in testcases {
-            match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
+            match validate(&dir, target, &outdir, &runstep, quiet) {
                 Ok((status, None)) => {
                     info!("[VALIDATE] target = {:?}: status = {:?}", target, status);
 
@@ -155,7 +136,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         }
         bar.finish();
 
-        println!("{}", Table::new(results).to_string());
+        println!("{}", Table::new(results));
     } else {
         #[derive(Tabled)]
         struct Result {
@@ -166,7 +147,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         let mut results = Vec::new();
 
         for target in testcases {
-            match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
+            match validate(&dir, target, &outdir, &runstep, quiet) {
                 Ok((status, Some(path))) => {
                     info!(
                         "[VALIDATE] target = {:?}: output = {:?}, status = {:?}",
@@ -191,6 +172,54 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         bar.finish();
 
         println!("{}", Table::new(results));
+    }
+
+    Ok(())
+}
+
+pub(super) fn root(args: ValidateArgs) -> Result<()> {
+    info!("{:#?}", args);
+
+    let validators = {
+        let mut validators = Vec::new();
+        for base in args.validators {
+            for file in find_files(&base, args.recursive)? {
+                validators.push(file);
+            }
+        }
+        validators
+    };
+    info!("validators = {validators:#?}");
+
+    let testcases = {
+        let mut testcases = Vec::new();
+        for base in args.testcases {
+            let sub_files = find_files(&base, false)?;
+
+            for target in sub_files {
+                if let Some(ext) = target.extension() {
+                    if ext == "in" {
+                        testcases.push(target);
+                    }
+                }
+            }
+        }
+        testcases
+    };
+    if testcases.len() == 0 {
+        warn!("no testcases found");
+        return Ok(());
+    }
+    info!("testcases = {testcases:#?}");
+
+    let langs = make_languages(&args.language)?;
+
+    for (i, validator) in validators.iter().enumerate() {
+        validate_root(&validator, &testcases, &langs, &args.outdir, args.quiet)?;
+
+        if i + 1 < validators.len() {
+            println!("");
+        }
     }
 
     Ok(())
