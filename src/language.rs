@@ -19,6 +19,18 @@ impl ExecuteStatus {
     }
 }
 
+impl std::fmt::Display for ExecuteStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ExecuteStatus::Success => write!(f, "OK")?,
+            ExecuteStatus::TimeLimitExceed => write!(f, "TLE")?,
+            ExecuteStatus::Fail => write!(f, "FAIL")?,
+        };
+
+        Ok(())
+    }
+}
+
 impl From<ExitStatus> for ExecuteStatus {
     fn from(status: ExitStatus) -> ExecuteStatus {
         if status.success() {

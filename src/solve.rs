@@ -1,4 +1,4 @@
-use crate::language::{compile_and_get_runstep, CommandStep};
+use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus};
 use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
@@ -8,6 +8,7 @@ use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tabled::{Table, Tabled};
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -50,7 +51,7 @@ fn solve<P: AsRef<Path>>(
     outdir: &Path,
     run: &CommandStep,
     timelimit: f64,
-) -> Result<PathBuf> {
+) -> Result<(ExecuteStatus, PathBuf)> {
     let input = File::open(&target)?;
 
     let name = target.file_stem().unwrap().to_string_lossy().to_string();
@@ -65,9 +66,7 @@ fn solve<P: AsRef<Path>>(
         Stdio::null(),
         Duration::from_secs_f64(timelimit),
     ) {
-        ensure!(status.success(), "failed to run");
-
-        Ok(answer_path.into())
+        Ok((status, answer_path.into()))
     } else {
         bail!("failed to run")
     }
@@ -104,14 +103,28 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         create_dir_all(&args.outdir)?;
     }
 
+    #[derive(Tabled)]
+    struct Result {
+        status: String,
+        generated_answer: String,
+        input: String,
+    }
+    let mut results = Vec::new();
+
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
     let bar = ProgressBar::new(testcases.len() as u64);
     bar.set_style(ProgressStyle::default_bar().template("[Solve] {bar} {pos:>4}/{len:4}")?);
     for target in testcases {
         match solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
-            Ok(answer) => {
-                info!("[SOLVE] {:?}", answer);
+            Ok((status, answer)) => {
+                info!("[SOLVE] {:?}, status = {:?}", answer, status);
+
+                results.push(Result {
+                    status: status.to_string(),
+                    generated_answer: format!("{:?}", answer),
+                    input: format!("{:?}", target),
+                });
             }
             Err(err) => {
                 warn!("[SOLVE] {:?}, reason = {:?}", target, err);
@@ -120,6 +133,8 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         bar.inc(1);
     }
     bar.finish();
+
+    println!("{}", Table::new(results));
 
     Ok(())
 }

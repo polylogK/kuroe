@@ -8,6 +8,7 @@ use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tabled::{Table, Tabled};
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -117,7 +118,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
 
     let langs = make_languages(&args.language)?;
 
-    if args.quiet && !args.outdir.exists() {
+    if !args.quiet && !args.outdir.exists() {
         create_dir_all(&args.outdir)?;
     }
 
@@ -125,25 +126,72 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
     let runstep = compile_and_get_runstep(&dir, &args.validator, &langs)?;
     let bar = ProgressBar::new(testcases.len() as u64);
     bar.set_style(ProgressStyle::default_bar().template("[Validate] {bar} {pos:>4}/{len:4}")?);
-    for target in testcases {
-        match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
-            Ok((status, output)) => {
-                if let Some(path) = output {
+    if args.quiet {
+        #[derive(Tabled)]
+        struct Result {
+            status: String,
+            target: String,
+        }
+        let mut results = Vec::new();
+
+        for target in testcases {
+            match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
+                Ok((status, None)) => {
+                    info!("[VALIDATE] target = {:?}: status = {:?}", target, status);
+
+                    results.push(Result {
+                        status: status.to_string(),
+                        target: format!("{:?}", target),
+                    });
+                }
+                Err(err) => {
+                    warn!("[VALIDATE] reason = {:?}", err);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+            bar.inc(1);
+        }
+        bar.finish();
+
+        println!("{}", Table::new(results).to_string());
+    } else {
+        #[derive(Tabled)]
+        struct Result {
+            status: String,
+            target: String,
+            stderr: String,
+        }
+        let mut results = Vec::new();
+
+        for target in testcases {
+            match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
+                Ok((status, Some(path))) => {
                     info!(
                         "[VALIDATE] target = {:?}: output = {:?}, status = {:?}",
                         target, path, status
                     );
-                } else {
-                    info!("[VALIDATE] target = {:?}: status = {:?}", target, status);
+
+                    results.push(Result {
+                        status: status.to_string(),
+                        target: format!("{:?}", target),
+                        stderr: format!("{:?}", path),
+                    });
+                }
+                Err(err) => {
+                    warn!("[VALIDATE] reason = {:?}", err);
+                }
+                _ => {
+                    unreachable!();
                 }
             }
-            Err(err) => {
-                warn!("[VALIDATE] reason = {:?}", err);
-            }
+            bar.inc(1);
         }
-        bar.inc(1);
+        bar.finish();
+
+        println!("{}", Table::new(results));
     }
-    bar.finish();
 
     Ok(())
 }

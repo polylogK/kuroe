@@ -9,6 +9,7 @@ use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tabled::{Table, Tabled};
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -252,6 +253,14 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
     }
     bar.finish();
 
+    #[derive(Tabled)]
+    struct Result {
+        status: String,
+        input: String,
+        output_and_answer: String,
+    }
+    let mut results = Vec::new();
+
     // judge
     if let Some(checker) = args.checker {
         ensure!(checker.exists(), "checker {checker:?} not found");
@@ -261,13 +270,36 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         let bar = ProgressBar::new(testcases.len() as u64);
         bar.set_style(ProgressStyle::default_bar().template("[Judge] {bar} {pos:>4}/{len:4}")?);
         for target in testcases.iter() {
-            match judge(&dir, target, &runstep) {
-                Ok(status) => {
-                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+            if target.status.unwrap().success() {
+                match judge(&dir, target, &runstep) {
+                    Ok(status) => {
+                        info!("[JUDGE] {:#?}, status = {:?}", target, status);
+
+                        let status = if status { "AC" } else { "WA" };
+                        results.push(Result {
+                            status: status.to_string(),
+                            input: format!("{:?}", target.get_input_path().unwrap()),
+                            output_and_answer: format!(
+                                "{:?}\n{:?}",
+                                target.get_output_path().unwrap(),
+                                target.get_answer_path().unwrap()
+                            ),
+                        });
+                    }
+                    Err(err) => {
+                        warn!("[JUDGE] {:?}, reason = {:?}", target, err);
+                    }
                 }
-                Err(err) => {
-                    warn!("[JUDGE] {:?}, reason = {:?}", target, err);
-                }
+            } else {
+                results.push(Result {
+                    status: target.status.unwrap().to_string(),
+                    input: format!("{:?}", target.get_input_path().unwrap()),
+                    output_and_answer: format!(
+                        "{:?}\n{:?}",
+                        target.get_output_path().unwrap(),
+                        target.get_answer_path().unwrap()
+                    ),
+                });
             }
             bar.inc(1);
         }
@@ -276,18 +308,43 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         let bar = ProgressBar::new(testcases.len() as u64);
         bar.set_style(ProgressStyle::default_bar().template("[Judge] {bar} {pos:>4}/{len:4}")?);
         for target in testcases.iter() {
-            match judge_by_diff(&dir, target) {
-                Ok(status) => {
-                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+            if target.status.unwrap().success() {
+                match judge_by_diff(&dir, target) {
+                    Ok(status) => {
+                        info!("[JUDGE] {:#?}, status = {:?}", target, status);
+
+                        let status = if status { "AC" } else { "WA" };
+                        results.push(Result {
+                            status: status.to_string(),
+                            input: format!("{:?}", target.get_input_path().unwrap()),
+                            output_and_answer: format!(
+                                "{:?}\n{:?}",
+                                target.get_output_path().unwrap(),
+                                target.get_answer_path().unwrap()
+                            ),
+                        });
+                    }
+                    Err(err) => {
+                        warn!("[JUDGE] {:?}, reason = {:?}", target, err);
+                    }
                 }
-                Err(err) => {
-                    warn!("[JUDGE] {:?}, reason = {:?}", target, err);
-                }
+            } else {
+                results.push(Result {
+                    status: target.status.unwrap().to_string(),
+                    input: format!("{:?}", target.get_input_path().unwrap()),
+                    output_and_answer: format!(
+                        "{:?}\n{:?}",
+                        target.get_output_path().unwrap(),
+                        target.get_answer_path().unwrap()
+                    ),
+                });
             }
             bar.inc(1);
         }
         bar.finish();
     }
+
+    println!("{}", Table::new(results));
 
     Ok(())
 }

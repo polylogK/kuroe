@@ -8,6 +8,7 @@ use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tabled::{Table, Tabled};
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -149,6 +150,14 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         create_dir_all(&args.outdir)?;
     }
 
+    #[derive(Tabled)]
+    struct Result {
+        status: String,
+        generated_case: String,
+        from: String,
+    }
+    let mut results = Vec::new();
+
     let count = generators
         .iter()
         .fold(0, |sum, x| sum + x.count.unwrap_or(args.count));
@@ -167,6 +176,12 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
             Ok(cases) => {
                 for (status, case) in cases {
                     info!("[GENERATE] {case:?}, status = {status:?}");
+
+                    results.push(Result {
+                        status: status.to_string(),
+                        generated_case: format!("{:?}", case),
+                        from: format!("{:?}", target.path),
+                    });
                 }
             }
             Err(err) => {
@@ -175,6 +190,8 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         }
     }
     bar.finish();
+
+    println!("{}", Table::new(results));
 
     Ok(())
 }
