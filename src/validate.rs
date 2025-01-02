@@ -4,6 +4,7 @@ use crate::language::{
 use crate::utils::find_files;
 use anyhow::{bail, Result};
 use clap::Args;
+use log::{info, warn};
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -51,7 +52,7 @@ fn validate<P: AsRef<Path>>(
     outdir: &Path,
     run: &CommandStep,
     quiet: bool,
-) -> Result<(ExecuteStatus, PathBuf)> {
+) -> Result<(ExecuteStatus, Option<PathBuf>)> {
     let input = File::open(&target)?;
     let name = target.file_stem().unwrap().to_string_lossy().to_string();
 
@@ -64,7 +65,7 @@ fn validate<P: AsRef<Path>>(
             Stdio::null(),
             Duration::from_secs(10),
         ) {
-            Ok((status, "".into()))
+            Ok((status, None))
         } else {
             bail!("failed to run")
         }
@@ -80,7 +81,7 @@ fn validate<P: AsRef<Path>>(
             err,
             Duration::from_secs(10),
         ) {
-            Ok((status, err_path.into()))
+            Ok((status, Some(err_path.into())))
         } else {
             bail!("failed to run")
         }
@@ -88,7 +89,7 @@ fn validate<P: AsRef<Path>>(
 }
 
 pub(super) fn root(args: ValidateArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
 
     let testcases = {
         let mut testcases = Vec::new();
@@ -105,6 +106,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         }
         testcases
     };
+    info!("testcases = {testcases:#?}");
 
     let langs = if args.language.len() == 0 {
         default_languages()
@@ -123,10 +125,20 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.validator, &langs)?;
     for target in testcases {
-        if let Ok((status, _)) = validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
-            println!("[VALIDATED] {:?}, status = {:?}", target, status);
-        } else {
-            println!("[IGNORED] {:?}", target);
+        match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
+            Ok((status, output)) => {
+                if let Some(path) = output {
+                    info!(
+                        "target = {:?}: output = {:?}, status = {:?}",
+                        target, path, status
+                    );
+                } else {
+                    info!("target = {:?}: status = {:?}", target, status);
+                }
+            }
+            Err(err) => {
+                warn!("reason = {:?}", err);
+            }
         }
     }
 

@@ -4,6 +4,7 @@ use crate::language::{
 use crate::utils::find_files;
 use anyhow::{bail, Result};
 use clap::Args;
+use log::{info, warn};
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
@@ -203,7 +204,7 @@ fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo, run: &CommandStep
 }
 
 pub(super) fn root(args: JudgeArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
 
     let langs = if args.language.len() == 0 {
         default_languages()
@@ -228,18 +229,21 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
     for target in testcases.iter_mut() {
-        if let Ok((status, output)) = solve(
+        match solve(
             &dir,
             target.get_input_path().unwrap(),
             &args.outdir,
             &runstep,
             args.timelimit,
         ) {
-            println!("[OUTPUT] {:?}, status = {:?}", output, status);
+            Ok((status, output)) => {
+                info!("[OUTPUT] {:?}, status = {:?}", output, status);
 
-            *target = target.clone().output(&output);
-        } else {
-            println!("[IGNORED] {:?}", target);
+                *target = target.clone().output(&output);
+            }
+            Err(err) => {
+                warn!("[IGNORED] {:?}, reason {:?}", target, err);
+            }
         }
     }
 
@@ -248,18 +252,24 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         let dir = TempDir::new()?;
         let runstep = compile_and_get_runstep(&dir, &checker, &langs)?;
         for target in testcases.iter() {
-            if let Ok(status) = judge(&dir, target, &runstep) {
-                println!("[JUDGE] {:?}, status = {:?}", target, status);
-            } else {
-                println!("[IGNORED] {:?}", target);
+            match judge(&dir, target, &runstep) {
+                Ok(status) => {
+                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+                }
+                Err(err) => {
+                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
+                }
             }
         }
     } else {
         for target in testcases.iter() {
-            if let Ok(status) = judge_by_diff(&dir, target) {
-                println!("[JUDGE] {:?}, status = {:?}", target, status);
-            } else {
-                println!("[IGNORED] {:?}", target);
+            match judge_by_diff(&dir, target) {
+                Ok(status) => {
+                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+                }
+                Err(err) => {
+                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
+                }
             }
         }
     }

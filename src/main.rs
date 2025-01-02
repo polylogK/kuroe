@@ -5,6 +5,7 @@ mod solve;
 mod utils;
 mod validate;
 use clap::{Parser, Subcommand};
+use env_logger;
 
 #[derive(Debug, Parser)]
 #[command(name = "kuroe")]
@@ -34,8 +35,9 @@ enum Commands {
 }
 
 fn main() {
-    let args = Cli::parse();
+    env_logger::init();
 
+    let args = Cli::parse();
     match args.command {
         Commands::Generate(args) => {
             generate::root(args).expect("failed to generate");

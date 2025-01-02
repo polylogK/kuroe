@@ -4,6 +4,7 @@ use crate::language::{
 use crate::utils::find_files;
 use anyhow::{Context, Result};
 use clap::Args;
+use log::{info, warn};
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -120,7 +121,7 @@ fn generate(
 }
 
 pub(super) fn root(args: GenerateArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
 
     let generators = {
         let mut generators = Vec::new();
@@ -130,6 +131,7 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         }
         generators
     };
+    info!("generators = {generators:#?}");
 
     let langs = if args.language.len() == 0 {
         default_languages()
@@ -146,7 +148,7 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
     }
 
     for target in generators {
-        if let Ok(sub_cases) = generate(
+        match generate(
             &target,
             &args.outdir,
             args.count,
@@ -154,11 +156,14 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
             args.timelimit,
             &langs,
         ) {
-            for (status, case) in sub_cases {
-                println!("[GENERATED] {case:?}, status = {status:?}");
+            Ok(cases) => {
+                for (status, case) in cases {
+                    info!("[GENERATE] {case:?}, status = {status:?}");
+                }
             }
-        } else {
-            println!("[IGNORED] {:?}", target);
+            Err(err) => {
+                warn!("[IGNORE] {:?}, reason = {:?}", target, err);
+            }
         }
     }
 

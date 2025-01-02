@@ -2,6 +2,7 @@ use crate::language::{compile_and_get_runstep, default_languages, CommandStep, C
 use crate::utils::find_files;
 use anyhow::{bail, ensure, Result};
 use clap::Args;
+use log::{info, warn};
 use regex::Regex;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -73,7 +74,7 @@ fn solve<P: AsRef<Path>>(
 }
 
 pub(super) fn root(args: SolveArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
 
     let testcases = {
         let mut testcases = Vec::new();
@@ -90,6 +91,7 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         }
         testcases
     };
+    info!("testcases = {testcases:#?}");
 
     let langs = if args.language.len() == 0 {
         default_languages()
@@ -108,10 +110,13 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
     for target in testcases {
-        if let Ok(answer) = solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
-            println!("[SOLVED] {:?}", answer);
-        } else {
-            println!("[FAILED] {:?}", target);
+        match solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
+            Ok(answer) => {
+                info!("[SOLVE] {:?}", answer);
+            }
+            Err(err) => {
+                warn!("[SOLVE FAILED] {:?}, reason = {:?}", target, err);
+            }
         }
     }
 

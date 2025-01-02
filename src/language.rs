@@ -1,4 +1,5 @@
 use anyhow::{bail, ensure, Context, Result};
+use log::debug;
 use regex::Regex;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
@@ -66,6 +67,7 @@ impl CommandStep {
         } else {
             self.args.clone()
         };
+        debug!("$ {:} {:}", self.program, args.join(" "));
 
         let mut child = Command::new(&self.program)
             .args(args)
