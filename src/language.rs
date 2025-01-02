@@ -6,7 +6,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum ExecuteStatus {
     Success,
     TimeLimitExceed,

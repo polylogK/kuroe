@@ -47,19 +47,21 @@ pub(super) struct JudgeArgs {
     language: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct JudgeFileInfo {
+#[derive(Debug, Clone)]
+struct JudgeInfo {
     input_path: Option<PathBuf>,
     answer_path: Option<PathBuf>,
     output_path: Option<PathBuf>,
+    status: Option<ExecuteStatus>,
 }
 
-impl JudgeFileInfo {
+impl JudgeInfo {
     fn new() -> Self {
         Self {
             input_path: None,
             answer_path: None,
             output_path: None,
+            status: None,
         }
     }
 
@@ -75,6 +77,10 @@ impl JudgeFileInfo {
         self.output_path = Some(path.to_path_buf());
         self
     }
+    fn status(mut self, status: ExecuteStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
 
     fn get_input_path(&self) -> Option<&PathBuf> {
         self.input_path.as_ref()
@@ -88,7 +94,7 @@ impl JudgeFileInfo {
 }
 
 /// .in と .ans が揃っているケースを列挙
-fn enumerate_valid_testcases(all_cases: &Vec<PathBuf>) -> Vec<JudgeFileInfo> {
+fn enumerate_valid_testcases(all_cases: &Vec<PathBuf>) -> Vec<JudgeInfo> {
     let mut ans_cases = HashMap::new();
     for case in all_cases.iter() {
         if case.extension().map_or(false, |ext| ext == "ans") {
@@ -102,12 +108,12 @@ fn enumerate_valid_testcases(all_cases: &Vec<PathBuf>) -> Vec<JudgeFileInfo> {
             let base_name = case.file_stem().unwrap();
 
             if let Some(ans_path) = ans_cases.get(base_name) {
-                valid_cases.push(JudgeFileInfo::new().input(&case).answer(&ans_path));
+                valid_cases.push(JudgeInfo::new().input(&case).answer(&ans_path));
             }
         }
     }
 
-    valid_cases.sort();
+    valid_cases.sort_by(|x, y| x.get_input_path().cmp(&y.get_input_path()));
     valid_cases
 }
 
@@ -140,7 +146,7 @@ fn solve<P: AsRef<Path>>(
 }
 
 /// 完全一致ジャッジ
-fn judge_by_diff<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo) -> Result<bool> {
+fn judge_by_diff<P: AsRef<Path>>(current_dir: P, info: &JudgeInfo) -> Result<bool> {
     let answer = info
         .get_answer_path()
         .unwrap()
@@ -167,7 +173,7 @@ fn judge_by_diff<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo) -> Result
 }
 
 // checker によるジャッジ
-fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo, run: &CommandStep) -> Result<bool> {
+fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeInfo, run: &CommandStep) -> Result<bool> {
     let input = info
         .get_input_path()
         .unwrap()
@@ -236,7 +242,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
             Ok((status, output)) => {
                 info!("[OUTPUT] {:?}, status = {:?}", output, status);
 
-                *target = target.clone().output(&output);
+                *target = target.clone().output(&output).status(status);
             }
             Err(err) => {
                 warn!("[IGNORED] {:?}, reason {:?}", target, err);
@@ -319,17 +325,20 @@ mod tests {
         let answer_path = PathBuf::from("test.ans");
         let output_path = PathBuf::from("test.out");
 
-        let info = JudgeFileInfo::new()
+        let info = JudgeInfo::new()
             .input(&input_path)
             .answer(&answer_path)
-            .output(&output_path);
+            .output(&output_path)
+            .status(ExecuteStatus::TimeLimitExceed);
         assert_eq!(info.get_input_path(), Some(&input_path));
         assert_eq!(info.get_answer_path(), Some(&answer_path));
         assert_eq!(info.get_output_path(), Some(&output_path));
+        assert_eq!(info.status, Some(ExecuteStatus::TimeLimitExceed));
 
-        let info = JudgeFileInfo::new().input(&input_path).answer(&answer_path);
+        let info = JudgeInfo::new().input(&input_path).answer(&answer_path);
         assert_eq!(info.get_input_path(), Some(&input_path));
         assert_eq!(info.get_answer_path(), Some(&answer_path));
         assert_eq!(info.get_output_path(), None);
+        assert_eq!(info.status, None);
     }
 }
