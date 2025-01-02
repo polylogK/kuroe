@@ -1,11 +1,10 @@
 use crate::language::{
-    compile_and_get_runstep, default_languages, CommandStep, CustomLang, ExecuteStatus,
+    compile_and_get_runstep, CommandStep, ExecuteStatus,
 };
-use crate::utils::find_files;
+use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
 use log::{info, warn};
-use regex::Regex;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -207,15 +206,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
     info!("{:#?}", args);
     ensure!(args.solver.exists(), "solver {:?} not found", args.solver);
 
-    let langs = if args.language.len() == 0 {
-        default_languages()
-    } else {
-        let mut langs = default_languages();
-        let custom_lang =
-            CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
-        langs.insert(0, Box::new(custom_lang));
-        langs
-    };
+    let langs = make_languages(&args.language)?;
 
     if !args.outdir.exists() {
         create_dir_all(&args.outdir)?;
