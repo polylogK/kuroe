@@ -2,6 +2,7 @@ use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus};
 use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -122,6 +123,8 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
 
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.validator, &langs)?;
+    let bar = ProgressBar::new(testcases.len() as u64);
+    bar.set_style(ProgressStyle::default_bar().template("[Validate] {bar} {pos:>4}/{len:4}")?);
     for target in testcases {
         match validate(&dir, &target, &args.outdir, &runstep, args.quiet) {
             Ok((status, output)) => {
@@ -138,7 +141,9 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
                 warn!("reason = {:?}", err);
             }
         }
+        bar.inc(1);
     }
+    bar.finish();
 
     Ok(())
 }

@@ -2,6 +2,7 @@ use crate::language::{compile_and_get_runstep, CommandStep};
 use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -105,6 +106,8 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
 
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
+    let bar = ProgressBar::new(testcases.len() as u64);
+    bar.set_style(ProgressStyle::default_bar().template("[Solve] {bar} {pos:>4}/{len:4}")?);
     for target in testcases {
         match solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
             Ok(answer) => {
@@ -114,7 +117,9 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
                 warn!("[SOLVE FAILED] {:?}, reason = {:?}", target, err);
             }
         }
+        bar.inc(1);
     }
+    bar.finish();
 
     Ok(())
 }

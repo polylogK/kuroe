@@ -1,9 +1,8 @@
-use crate::language::{
-    compile_and_get_runstep, CommandStep, ExecuteStatus,
-};
+use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus};
 use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
@@ -224,6 +223,8 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
     // generate outputs
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
+    let bar = ProgressBar::new(testcases.len() as u64);
+    bar.set_style(ProgressStyle::default_bar().template("[Solve] {bar} {pos:>4}/{len:4}")?);
     for target in testcases.iter_mut() {
         match solve(
             &dir,
@@ -241,7 +242,9 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
                 warn!("[IGNORED] {:?}, reason {:?}", target, err);
             }
         }
+        bar.inc(1);
     }
+    bar.finish();
 
     // judge
     if let Some(checker) = args.checker {
@@ -249,6 +252,8 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
 
         let dir = TempDir::new()?;
         let runstep = compile_and_get_runstep(&dir, &checker, &langs)?;
+        let bar = ProgressBar::new(testcases.len() as u64);
+        bar.set_style(ProgressStyle::default_bar().template("[Judge] {bar} {pos:>4}/{len:4}")?);
         for target in testcases.iter() {
             match judge(&dir, target, &runstep) {
                 Ok(status) => {
@@ -258,8 +263,12 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
                     warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
                 }
             }
+            bar.inc(1);
         }
+        bar.finish();
     } else {
+        let bar = ProgressBar::new(testcases.len() as u64);
+        bar.set_style(ProgressStyle::default_bar().template("[Judge] {bar} {pos:>4}/{len:4}")?);
         for target in testcases.iter() {
             match judge_by_diff(&dir, target) {
                 Ok(status) => {
@@ -269,7 +278,9 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
                     warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
                 }
             }
+            bar.inc(1);
         }
+        bar.finish();
     }
 
     Ok(())
