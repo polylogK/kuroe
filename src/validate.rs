@@ -2,7 +2,7 @@ use crate::language::{
     compile_and_get_runstep, default_languages, CommandStep, CustomLang, ExecuteStatus,
 };
 use crate::utils::find_files;
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use clap::Args;
 use log::{info, warn};
 use regex::Regex;
@@ -90,6 +90,11 @@ fn validate<P: AsRef<Path>>(
 
 pub(super) fn root(args: ValidateArgs) -> Result<()> {
     info!("{:#?}", args);
+    ensure!(
+        args.validator.exists(),
+        "validator {:?} not found",
+        args.validator
+    );
 
     let testcases = {
         let mut testcases = Vec::new();
@@ -106,6 +111,10 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         }
         testcases
     };
+    if testcases.len() == 0 {
+        warn!("no testcases found");
+        return Ok(());
+    }
     info!("testcases = {testcases:#?}");
 
     let langs = if args.language.len() == 0 {

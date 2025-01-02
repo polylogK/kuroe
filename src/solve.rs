@@ -75,6 +75,7 @@ fn solve<P: AsRef<Path>>(
 
 pub(super) fn root(args: SolveArgs) -> Result<()> {
     info!("{:#?}", args);
+    ensure!(args.solver.exists(), "solver {:?} not found", args.solver);
 
     let testcases = {
         let mut testcases = Vec::new();
@@ -91,6 +92,10 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         }
         testcases
     };
+    if testcases.len() == 0 {
+        warn!("no testcases found");
+        return Ok(());
+    }
     info!("testcases = {testcases:#?}");
 
     let langs = if args.language.len() == 0 {

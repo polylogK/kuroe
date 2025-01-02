@@ -257,7 +257,7 @@ pub(crate) fn compile_and_get_runstep<P: AsRef<Path>>(
     let lang = {
         let ext = target
             .extension()
-            .with_context(|| format!("{:?} is not found", target))?
+            .with_context(|| format!("{:?} not found", target))?
             .to_string_lossy()
             .to_string();
         detect_language(&ext, &langs)?

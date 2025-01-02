@@ -2,7 +2,7 @@ use crate::language::{
     compile_and_get_runstep, default_languages, CommandStep, CustomLang, ExecuteStatus,
 };
 use crate::utils::find_files;
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use clap::Args;
 use log::{info, warn};
 use regex::Regex;
@@ -205,6 +205,7 @@ fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo, run: &CommandStep
 
 pub(super) fn root(args: JudgeArgs) -> Result<()> {
     info!("{:#?}", args);
+    ensure!(args.solver.exists(), "solver {:?} not found", args.solver);
 
     let langs = if args.language.len() == 0 {
         default_languages()
@@ -224,6 +225,10 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         let all_cases = find_files(&args.testcase, true)?;
         enumerate_valid_testcases(&all_cases)
     };
+    if testcases.len() == 0 {
+        warn!("no testcases found");
+        return Ok(());
+    }
 
     // generate outputs
     let dir = TempDir::new()?;
@@ -249,6 +254,8 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
 
     // judge
     if let Some(checker) = args.checker {
+        ensure!(checker.exists(), "checker {checker:?} not found");
+
         let dir = TempDir::new()?;
         let runstep = compile_and_get_runstep(&dir, &checker, &langs)?;
         for target in testcases.iter() {

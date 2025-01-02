@@ -2,7 +2,7 @@ use crate::language::{
     compile_and_get_runstep, default_languages, CustomLang, ExecuteStatus, Language,
 };
 use crate::utils::find_files;
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use clap::Args;
 use log::{info, warn};
 use regex::Regex;
@@ -89,6 +89,8 @@ fn generate(
     timelimit: f64,
     langs: &Vec<Box<dyn Language>>,
 ) -> Result<Vec<(ExecuteStatus, PathBuf)>> {
+    ensure!(target.exists(), "{target:?} not found!");
+
     let info = GenFileInfo::new(target)?;
 
     // compile
