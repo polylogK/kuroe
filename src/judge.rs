@@ -245,7 +245,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
                 *target = target.clone().output(&output).status(status);
             }
             Err(err) => {
-                warn!("[IGNORED] {:?}, reason {:?}", target, err);
+                warn!("[IGNORE] {:?}, reason = {:?}", target, err);
             }
         }
         bar.inc(1);
@@ -266,7 +266,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
                     info!("[JUDGE] {:#?}, status = {:?}", target, status);
                 }
                 Err(err) => {
-                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
+                    warn!("[JUDGE] {:?}, reason = {:?}", target, err);
                 }
             }
             bar.inc(1);
@@ -281,7 +281,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
                     info!("[JUDGE] {:#?}, status = {:?}", target, status);
                 }
                 Err(err) => {
-                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
+                    warn!("[JUDGE] {:?}, reason = {:?}", target, err);
                 }
             }
             bar.inc(1);

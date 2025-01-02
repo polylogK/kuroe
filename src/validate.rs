@@ -130,15 +130,15 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
             Ok((status, output)) => {
                 if let Some(path) = output {
                     info!(
-                        "target = {:?}: output = {:?}, status = {:?}",
+                        "[VALIDATE] target = {:?}: output = {:?}, status = {:?}",
                         target, path, status
                     );
                 } else {
-                    info!("target = {:?}: status = {:?}", target, status);
+                    info!("[VALIDATE] target = {:?}: status = {:?}", target, status);
                 }
             }
             Err(err) => {
-                warn!("reason = {:?}", err);
+                warn!("[VALIDATE] reason = {:?}", err);
             }
         }
         bar.inc(1);

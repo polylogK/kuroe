@@ -114,7 +114,7 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
                 info!("[SOLVE] {:?}", answer);
             }
             Err(err) => {
-                warn!("[SOLVE FAILED] {:?}, reason = {:?}", target, err);
+                warn!("[SOLVE] {:?}, reason = {:?}", target, err);
             }
         }
         bar.inc(1);
