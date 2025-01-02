@@ -6,7 +6,7 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum ExecuteStatus {
     Success,
     TimeLimitExceed,
@@ -16,6 +16,18 @@ pub(crate) enum ExecuteStatus {
 impl ExecuteStatus {
     pub fn success(&self) -> bool {
         matches!(self, ExecuteStatus::Success)
+    }
+}
+
+impl std::fmt::Display for ExecuteStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ExecuteStatus::Success => write!(f, "OK")?,
+            ExecuteStatus::TimeLimitExceed => write!(f, "TLE")?,
+            ExecuteStatus::Fail => write!(f, "FAIL")?,
+        };
+
+        Ok(())
     }
 }
 

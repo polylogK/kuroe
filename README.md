@@ -10,8 +10,21 @@ kuroe では，テストケース生成・バリデーション・想定解生�
 生成ケース数はオプションで指定可能ですが，ファイル名で指定することも可能です。`kuroe.5.cpp` のようにジェネレータの拡張子の直前に数字が指定されている場合は，その数字の個数だけ生成されます（この場合 5 個）。
 
 ```bash
-kuroe generate main.py -n 5 # シード 0 から 4 で 5 個生成
-kuroe generate ./example/generator # ./example/generator 内の全ジェネレータで生成
+$ kuroe generate example/generator/
+[Generate] ████████████████████    5/5
++--------+-------------------------------------------+------------------------------------------+
+| status | generated_case                            | from                                     |
++--------+-------------------------------------------+------------------------------------------+
+| OK     | "./testcases/input/example_by_cpp_000.in" | "example/generator/example_by_cpp.3.cpp" |
++--------+-------------------------------------------+------------------------------------------+
+| OK     | "./testcases/input/example_by_cpp_001.in" | "example/generator/example_by_cpp.3.cpp" |
++--------+-------------------------------------------+------------------------------------------+
+| OK     | "./testcases/input/example_by_cpp_002.in" | "example/generator/example_by_cpp.3.cpp" |
++--------+-------------------------------------------+------------------------------------------+
+| OK     | "./testcases/input/example_by_py_000.in"  | "example/generator/example_by_py.py"     |
++--------+-------------------------------------------+------------------------------------------+
+| OK     | "./testcases/input/example_by_txt_000.in" | "example/generator/example_by_txt.in"    |
++--------+-------------------------------------------+------------------------------------------+
 ```
 
 - 引数
@@ -36,7 +49,21 @@ kuroe generate ./example/generator # ./example/generator 内の全ジェネレ�
 `testlib.h` による `validator` を想定しています。
 
 ```bash
-kuroe validate example/validator.cpp
+$ kuroe validate example/validator.cpp
+[Validate] ████████████████████    5/5
++--------+-------------------------------------------+-----------------------------------------------+
+| status | target                                    | stderr                                        |
++--------+-------------------------------------------+-----------------------------------------------+
+| OK     | "./testcases/input/example_by_cpp_000.in" | "./testcases/validate/example_by_cpp_000.val" |
++--------+-------------------------------------------+-----------------------------------------------+
+| OK     | "./testcases/input/example_by_cpp_001.in" | "./testcases/validate/example_by_cpp_001.val" |
++--------+-------------------------------------------+-----------------------------------------------+
+| OK     | "./testcases/input/example_by_cpp_002.in" | "./testcases/validate/example_by_cpp_002.val" |
++--------+-------------------------------------------+-----------------------------------------------+
+| OK     | "./testcases/input/example_by_py_000.in"  | "./testcases/validate/example_by_py_000.val"  |
++--------+-------------------------------------------+-----------------------------------------------+
+| OK     | "./testcases/input/example_by_txt_000.in" | "./testcases/validate/example_by_txt_000.val" |
++--------+-------------------------------------------+-----------------------------------------------+
 ```
 
 - 引数
@@ -52,10 +79,24 @@ kuroe validate example/validator.cpp
 
 ## サブコマンド：solve
 
-想定解コードをもとに answer を生成する。
+想定解コードによって answer を生成する。
 
 ```bash
-kuroe solve example/solver/correct.cpp
+$ kuroe solve example/solver/correct.cpp
+[Solve] ████████████████████    5/5
++--------+---------------------------------------------+-------------------------------------------+
+| status | generated_answer                            | input                                     |
++--------+---------------------------------------------+-------------------------------------------+
+| OK     | "./testcases/answer/example_by_cpp_000.ans" | "./testcases/input/example_by_cpp_000.in" |
++--------+---------------------------------------------+-------------------------------------------+
+| OK     | "./testcases/answer/example_by_cpp_001.ans" | "./testcases/input/example_by_cpp_001.in" |
++--------+---------------------------------------------+-------------------------------------------+
+| OK     | "./testcases/answer/example_by_cpp_002.ans" | "./testcases/input/example_by_cpp_002.in" |
++--------+---------------------------------------------+-------------------------------------------+
+| OK     | "./testcases/answer/example_by_py_000.ans"  | "./testcases/input/example_by_py_000.in"  |
++--------+---------------------------------------------+-------------------------------------------+
+| OK     | "./testcases/answer/example_by_txt_000.ans" | "./testcases/input/example_by_txt_000.in" |
++--------+---------------------------------------------+-------------------------------------------+
 ```
 
 - 引数
@@ -77,8 +118,28 @@ kuroe solve example/solver/correct.cpp
 `testlib.h` による `checker` を使用することができる。
 
 ```bash
-kuroe judge example/solver/correct.cpp # 厳密一致によるジャッジ
-kuroe judge example/solver/correct.cpp -c example/checker.cpp # checker によるジャッジ
+$ kuroe judge example/solver/correct.cpp # 厳密一致によるジャッジ
+[Solve] ████████████████████    5/5
+[Judge] ████████████████████    5/5
++--------+-------------------------------------------+---------------------------------------------+
+| status | input                                     | output_and_answer                           |
++--------+-------------------------------------------+---------------------------------------------+
+| AC     | "./testcases/input/example_by_cpp_000.in" | "./testcases/output/example_by_cpp_000.out" |
+|        |                                           | "./testcases/answer/example_by_cpp_000.ans" |
++--------+-------------------------------------------+---------------------------------------------+
+| AC     | "./testcases/input/example_by_cpp_001.in" | "./testcases/output/example_by_cpp_001.out" |
+|        |                                           | "./testcases/answer/example_by_cpp_001.ans" |
++--------+-------------------------------------------+---------------------------------------------+
+| AC     | "./testcases/input/example_by_cpp_002.in" | "./testcases/output/example_by_cpp_002.out" |
+|        |                                           | "./testcases/answer/example_by_cpp_002.ans" |
++--------+-------------------------------------------+---------------------------------------------+
+| AC     | "./testcases/input/example_by_py_000.in"  | "./testcases/output/example_by_py_000.out"  |
+|        |                                           | "./testcases/answer/example_by_py_000.ans"  |
++--------+-------------------------------------------+---------------------------------------------+
+| AC     | "./testcases/input/example_by_txt_000.in" | "./testcases/output/example_by_txt_000.out" |
+|        |                                           | "./testcases/answer/example_by_txt_000.ans" |
++--------+-------------------------------------------+---------------------------------------------+
+$ kuroe judge example/solver/correct.cpp -c example/checker.cpp # checker によるジャッジ
 ```
 
 - 引数

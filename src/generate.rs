@@ -1,12 +1,14 @@
 use crate::language::{compile_and_get_runstep, ExecuteStatus, Language};
 use crate::utils::{find_files, make_languages};
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result};
 use clap::Args;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tabled::{Table, Tabled};
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -50,6 +52,7 @@ pub(super) struct GenerateArgs {
 
 #[derive(Debug)]
 struct GenFileInfo {
+    path: PathBuf,
     name: String,
     count: Option<u32>,
 }
@@ -73,32 +76,33 @@ impl GenFileInfo {
             stem
         };
 
-        Ok(GenFileInfo { name, count })
+        Ok(GenFileInfo {
+            path: path.to_path_buf(),
+            name,
+            count,
+        })
     }
 }
 
 /// 生成されたテストケースへのパスを返す
 fn generate(
-    target: &Path,
+    target: &GenFileInfo,
     outdir: &Path,
     count: u32,
     seed: u32,
     timelimit: f64,
     langs: &Vec<Box<dyn Language>>,
+    bar: &ProgressBar,
 ) -> Result<Vec<(ExecuteStatus, PathBuf)>> {
-    ensure!(target.exists(), "{target:?} not found!");
-
-    let info = GenFileInfo::new(target)?;
-
     // compile
     let dir = TempDir::new()?;
-    let runstep = compile_and_get_runstep(&dir, &target, &langs)?;
+    let runstep = compile_and_get_runstep(&dir, &target.path, &langs)?;
 
     // generate
-    let count = info.count.unwrap_or(count);
+    let count = target.count.unwrap_or(count);
     let mut generated_cases = Vec::new();
     for i in 0..count {
-        let output_name = format!("{}_{:03}.in", &info.name, i);
+        let output_name = format!("{}_{:03}.in", &target.name, i);
         let output_path = outdir.join(output_name);
         let output = File::create(&output_path).unwrap();
 
@@ -111,11 +115,18 @@ fn generate(
                 Stdio::null(),
                 Duration::from_secs_f64(timelimit),
             )
-            .with_context(|| format!("failed to generate {:?} at seed = {:?}", target, seed + i))?;
+            .with_context(|| {
+                format!(
+                    "failed to generate {:?} at seed = {:?}",
+                    target.path,
+                    seed + i
+                )
+            })?;
 
         generated_cases.push((status, output_path.to_path_buf()));
     }
 
+    bar.inc(1);
     Ok(generated_cases)
 }
 
@@ -125,8 +136,9 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
     let generators = {
         let mut generators = Vec::new();
         for base in args.generators {
-            let mut sub_files = find_files(&base, args.recursive).unwrap();
-            generators.append(&mut sub_files);
+            for file in find_files(&base, args.recursive)? {
+                generators.push(GenFileInfo::new(&file)?);
+            }
         }
         generators
     };
@@ -138,6 +150,19 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         create_dir_all(&args.outdir)?;
     }
 
+    #[derive(Tabled)]
+    struct Result {
+        status: String,
+        generated_case: String,
+        from: String,
+    }
+    let mut results = Vec::new();
+
+    let count = generators
+        .iter()
+        .fold(0, |sum, x| sum + x.count.unwrap_or(args.count));
+    let bar = ProgressBar::new(count as u64);
+    bar.set_style(ProgressStyle::default_bar().template("[Generate] {bar} {pos:>4}/{len:4}")?);
     for target in generators {
         match generate(
             &target,
@@ -146,10 +171,17 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
             args.seed,
             args.timelimit,
             &langs,
+            &bar,
         ) {
             Ok(cases) => {
                 for (status, case) in cases {
                     info!("[GENERATE] {case:?}, status = {status:?}");
+
+                    results.push(Result {
+                        status: status.to_string(),
+                        generated_case: format!("{:?}", case),
+                        from: format!("{:?}", target.path),
+                    });
                 }
             }
             Err(err) => {
@@ -157,6 +189,9 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
             }
         }
     }
+    bar.finish();
+
+    println!("{}", Table::new(results));
 
     Ok(())
 }
@@ -168,10 +203,12 @@ mod tests {
     #[test]
     fn test_genfileinfo() {
         let info = GenFileInfo::new(Path::new("dir/test.0.nocount.ext")).unwrap();
+        assert_eq!(info.path, PathBuf::from("dir/test.0.nocount.ext"));
         assert_eq!(info.name, String::from("test.0.nocount"));
         assert_eq!(info.count, None);
 
         let info = GenFileInfo::new(Path::new("test.5.ext")).unwrap();
+        assert_eq!(info.path, PathBuf::from("test.5.ext"));
         assert_eq!(info.name, String::from("test"));
         assert_eq!(info.count, Some(5));
 

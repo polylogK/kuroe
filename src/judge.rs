@@ -1,15 +1,15 @@
-use crate::language::{
-    compile_and_get_runstep, CommandStep, ExecuteStatus,
-};
+use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus};
 use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tabled::{Table, Tabled};
 use tempfile::TempDir;
 
 #[derive(Debug, Args)]
@@ -48,19 +48,21 @@ pub(super) struct JudgeArgs {
     language: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct JudgeFileInfo {
+#[derive(Debug, Clone)]
+struct JudgeInfo {
     input_path: Option<PathBuf>,
     answer_path: Option<PathBuf>,
     output_path: Option<PathBuf>,
+    status: Option<ExecuteStatus>,
 }
 
-impl JudgeFileInfo {
+impl JudgeInfo {
     fn new() -> Self {
         Self {
             input_path: None,
             answer_path: None,
             output_path: None,
+            status: None,
         }
     }
 
@@ -76,6 +78,10 @@ impl JudgeFileInfo {
         self.output_path = Some(path.to_path_buf());
         self
     }
+    fn status(mut self, status: ExecuteStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
 
     fn get_input_path(&self) -> Option<&PathBuf> {
         self.input_path.as_ref()
@@ -89,7 +95,7 @@ impl JudgeFileInfo {
 }
 
 /// .in と .ans が揃っているケースを列挙
-fn enumerate_valid_testcases(all_cases: &Vec<PathBuf>) -> Vec<JudgeFileInfo> {
+fn enumerate_valid_testcases(all_cases: &Vec<PathBuf>) -> Vec<JudgeInfo> {
     let mut ans_cases = HashMap::new();
     for case in all_cases.iter() {
         if case.extension().map_or(false, |ext| ext == "ans") {
@@ -103,12 +109,12 @@ fn enumerate_valid_testcases(all_cases: &Vec<PathBuf>) -> Vec<JudgeFileInfo> {
             let base_name = case.file_stem().unwrap();
 
             if let Some(ans_path) = ans_cases.get(base_name) {
-                valid_cases.push(JudgeFileInfo::new().input(&case).answer(&ans_path));
+                valid_cases.push(JudgeInfo::new().input(&case).answer(&ans_path));
             }
         }
     }
 
-    valid_cases.sort();
+    valid_cases.sort_by(|x, y| x.get_input_path().cmp(&y.get_input_path()));
     valid_cases
 }
 
@@ -141,7 +147,7 @@ fn solve<P: AsRef<Path>>(
 }
 
 /// 完全一致ジャッジ
-fn judge_by_diff<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo) -> Result<bool> {
+fn judge_by_diff<P: AsRef<Path>>(current_dir: P, info: &JudgeInfo) -> Result<bool> {
     let answer = info
         .get_answer_path()
         .unwrap()
@@ -168,7 +174,7 @@ fn judge_by_diff<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo) -> Result
 }
 
 // checker によるジャッジ
-fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo, run: &CommandStep) -> Result<bool> {
+fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeInfo, run: &CommandStep) -> Result<bool> {
     let input = info
         .get_input_path()
         .unwrap()
@@ -224,6 +230,8 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
     // generate outputs
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
+    let bar = ProgressBar::new(testcases.len() as u64);
+    bar.set_style(ProgressStyle::default_bar().template("[Solve] {bar} {pos:>4}/{len:4}")?);
     for target in testcases.iter_mut() {
         match solve(
             &dir,
@@ -235,13 +243,23 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
             Ok((status, output)) => {
                 info!("[OUTPUT] {:?}, status = {:?}", output, status);
 
-                *target = target.clone().output(&output);
+                *target = target.clone().output(&output).status(status);
             }
             Err(err) => {
-                warn!("[IGNORED] {:?}, reason {:?}", target, err);
+                warn!("[IGNORE] {:?}, reason = {:?}", target, err);
             }
         }
+        bar.inc(1);
     }
+    bar.finish();
+
+    #[derive(Tabled)]
+    struct Result {
+        status: String,
+        input: String,
+        output_and_answer: String,
+    }
+    let mut results = Vec::new();
 
     // judge
     if let Some(checker) = args.checker {
@@ -249,28 +267,84 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
 
         let dir = TempDir::new()?;
         let runstep = compile_and_get_runstep(&dir, &checker, &langs)?;
+        let bar = ProgressBar::new(testcases.len() as u64);
+        bar.set_style(ProgressStyle::default_bar().template("[Judge] {bar} {pos:>4}/{len:4}")?);
         for target in testcases.iter() {
-            match judge(&dir, target, &runstep) {
-                Ok(status) => {
-                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+            if target.status.unwrap().success() {
+                match judge(&dir, target, &runstep) {
+                    Ok(status) => {
+                        info!("[JUDGE] {:#?}, status = {:?}", target, status);
+
+                        let status = if status { "AC" } else { "WA" };
+                        results.push(Result {
+                            status: status.to_string(),
+                            input: format!("{:?}", target.get_input_path().unwrap()),
+                            output_and_answer: format!(
+                                "{:?}\n{:?}",
+                                target.get_output_path().unwrap(),
+                                target.get_answer_path().unwrap()
+                            ),
+                        });
+                    }
+                    Err(err) => {
+                        warn!("[JUDGE] {:?}, reason = {:?}", target, err);
+                    }
                 }
-                Err(err) => {
-                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
-                }
+            } else {
+                results.push(Result {
+                    status: target.status.unwrap().to_string(),
+                    input: format!("{:?}", target.get_input_path().unwrap()),
+                    output_and_answer: format!(
+                        "{:?}\n{:?}",
+                        target.get_output_path().unwrap(),
+                        target.get_answer_path().unwrap()
+                    ),
+                });
             }
+            bar.inc(1);
         }
+        bar.finish();
     } else {
+        let bar = ProgressBar::new(testcases.len() as u64);
+        bar.set_style(ProgressStyle::default_bar().template("[Judge] {bar} {pos:>4}/{len:4}")?);
         for target in testcases.iter() {
-            match judge_by_diff(&dir, target) {
-                Ok(status) => {
-                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+            if target.status.unwrap().success() {
+                match judge_by_diff(&dir, target) {
+                    Ok(status) => {
+                        info!("[JUDGE] {:#?}, status = {:?}", target, status);
+
+                        let status = if status { "AC" } else { "WA" };
+                        results.push(Result {
+                            status: status.to_string(),
+                            input: format!("{:?}", target.get_input_path().unwrap()),
+                            output_and_answer: format!(
+                                "{:?}\n{:?}",
+                                target.get_output_path().unwrap(),
+                                target.get_answer_path().unwrap()
+                            ),
+                        });
+                    }
+                    Err(err) => {
+                        warn!("[JUDGE] {:?}, reason = {:?}", target, err);
+                    }
                 }
-                Err(err) => {
-                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
-                }
+            } else {
+                results.push(Result {
+                    status: target.status.unwrap().to_string(),
+                    input: format!("{:?}", target.get_input_path().unwrap()),
+                    output_and_answer: format!(
+                        "{:?}\n{:?}",
+                        target.get_output_path().unwrap(),
+                        target.get_answer_path().unwrap()
+                    ),
+                });
             }
+            bar.inc(1);
         }
+        bar.finish();
     }
+
+    println!("{}", Table::new(results));
 
     Ok(())
 }
@@ -308,17 +382,20 @@ mod tests {
         let answer_path = PathBuf::from("test.ans");
         let output_path = PathBuf::from("test.out");
 
-        let info = JudgeFileInfo::new()
+        let info = JudgeInfo::new()
             .input(&input_path)
             .answer(&answer_path)
-            .output(&output_path);
+            .output(&output_path)
+            .status(ExecuteStatus::TimeLimitExceed);
         assert_eq!(info.get_input_path(), Some(&input_path));
         assert_eq!(info.get_answer_path(), Some(&answer_path));
         assert_eq!(info.get_output_path(), Some(&output_path));
+        assert_eq!(info.status, Some(ExecuteStatus::TimeLimitExceed));
 
-        let info = JudgeFileInfo::new().input(&input_path).answer(&answer_path);
+        let info = JudgeInfo::new().input(&input_path).answer(&answer_path);
         assert_eq!(info.get_input_path(), Some(&input_path));
         assert_eq!(info.get_answer_path(), Some(&answer_path));
         assert_eq!(info.get_output_path(), None);
+        assert_eq!(info.status, None);
     }
 }
