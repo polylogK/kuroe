@@ -1,10 +1,8 @@
-use crate::language::{
-    compile_and_get_runstep, default_languages, CustomLang, ExecuteStatus, Language,
-};
-use crate::utils::find_files;
-use anyhow::{Context, Result};
+use crate::language::{compile_and_get_runstep, ExecuteStatus, Language};
+use crate::utils::{find_files, make_languages};
+use anyhow::{ensure, Context, Result};
 use clap::Args;
-use regex::Regex;
+use log::{info, warn};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -88,6 +86,8 @@ fn generate(
     timelimit: f64,
     langs: &Vec<Box<dyn Language>>,
 ) -> Result<Vec<(ExecuteStatus, PathBuf)>> {
+    ensure!(target.exists(), "{target:?} not found!");
+
     let info = GenFileInfo::new(target)?;
 
     // compile
@@ -120,7 +120,7 @@ fn generate(
 }
 
 pub(super) fn root(args: GenerateArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
 
     let generators = {
         let mut generators = Vec::new();
@@ -130,23 +130,16 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         }
         generators
     };
+    info!("generators = {generators:#?}");
 
-    let langs = if args.language.len() == 0 {
-        default_languages()
-    } else {
-        let mut langs = default_languages();
-        let custom_lang =
-            CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
-        langs.insert(0, Box::new(custom_lang));
-        langs
-    };
+    let langs = make_languages(&args.language)?;
 
     if !args.outdir.exists() {
         create_dir_all(&args.outdir)?;
     }
 
     for target in generators {
-        if let Ok(sub_cases) = generate(
+        match generate(
             &target,
             &args.outdir,
             args.count,
@@ -154,11 +147,14 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
             args.timelimit,
             &langs,
         ) {
-            for (status, case) in sub_cases {
-                println!("[GENERATED] {case:?}, status = {status:?}");
+            Ok(cases) => {
+                for (status, case) in cases {
+                    info!("[GENERATE] {case:?}, status = {status:?}");
+                }
             }
-        } else {
-            println!("[IGNORED] {:?}", target);
+            Err(err) => {
+                warn!("[IGNORE] {:?}, reason = {:?}", target, err);
+            }
         }
     }
 

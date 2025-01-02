@@ -4,7 +4,11 @@ mod language;
 mod solve;
 mod utils;
 mod validate;
+
 use clap::{Parser, Subcommand};
+use env_logger;
+use log::error;
+use std::process::ExitCode;
 
 #[derive(Debug, Parser)]
 #[command(name = "kuroe")]
@@ -33,21 +37,42 @@ enum Commands {
     Judge(judge::JudgeArgs),
 }
 
-fn main() {
-    let args = Cli::parse();
+fn main() -> ExitCode {
+    env_logger::init();
 
+    let args = Cli::parse();
     match args.command {
         Commands::Generate(args) => {
-            generate::root(args).expect("failed to generate");
+            if let Err(err) = generate::root(args) {
+                error!("{err:?}");
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Commands::Validate(args) => {
-            validate::root(args).expect("failed to validate");
+            if let Err(err) = validate::root(args) {
+                error!("{err:?}");
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Commands::Solve(args) => {
-            solve::root(args).expect("failed to solve");
+            if let Err(err) = solve::root(args) {
+                error!("{err:?}");
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Commands::Judge(args) => {
-            judge::root(args).expect("failed to judge");
+            if let Err(err) = judge::root(args) {
+                error!("{err:?}");
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
     }
 }

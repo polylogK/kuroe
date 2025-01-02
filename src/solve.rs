@@ -1,8 +1,8 @@
-use crate::language::{compile_and_get_runstep, default_languages, CommandStep, CustomLang};
-use crate::utils::find_files;
+use crate::language::{compile_and_get_runstep, CommandStep};
+use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
 use clap::Args;
-use regex::Regex;
+use log::{info, warn};
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -73,7 +73,8 @@ fn solve<P: AsRef<Path>>(
 }
 
 pub(super) fn root(args: SolveArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
+    ensure!(args.solver.exists(), "solver {:?} not found", args.solver);
 
     let testcases = {
         let mut testcases = Vec::new();
@@ -90,16 +91,13 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         }
         testcases
     };
+    if testcases.len() == 0 {
+        warn!("no testcases found");
+        return Ok(());
+    }
+    info!("testcases = {testcases:#?}");
 
-    let langs = if args.language.len() == 0 {
-        default_languages()
-    } else {
-        let mut langs = default_languages();
-        let custom_lang =
-            CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
-        langs.insert(0, Box::new(custom_lang));
-        langs
-    };
+    let langs = make_languages(&args.language)?;
 
     if !args.outdir.exists() {
         create_dir_all(&args.outdir)?;
@@ -108,10 +106,13 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
     for target in testcases {
-        if let Ok(answer) = solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
-            println!("[SOLVED] {:?}", answer);
-        } else {
-            println!("[FAILED] {:?}", target);
+        match solve(&dir, &target, &args.outdir, &runstep, args.timelimit) {
+            Ok(answer) => {
+                info!("[SOLVE] {:?}", answer);
+            }
+            Err(err) => {
+                warn!("[SOLVE FAILED] {:?}, reason = {:?}", target, err);
+            }
         }
     }
 

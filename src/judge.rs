@@ -1,10 +1,10 @@
 use crate::language::{
-    compile_and_get_runstep, default_languages, CommandStep, CustomLang, ExecuteStatus,
+    compile_and_get_runstep, CommandStep, ExecuteStatus,
 };
-use crate::utils::find_files;
-use anyhow::{bail, Result};
+use crate::utils::{find_files, make_languages};
+use anyhow::{bail, ensure, Result};
 use clap::Args;
-use regex::Regex;
+use log::{info, warn};
 use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::path::{Path, PathBuf};
@@ -203,17 +203,10 @@ fn judge<P: AsRef<Path>>(current_dir: P, info: &JudgeFileInfo, run: &CommandStep
 }
 
 pub(super) fn root(args: JudgeArgs) -> Result<()> {
-    println!("{:?}", args);
+    info!("{:#?}", args);
+    ensure!(args.solver.exists(), "solver {:?} not found", args.solver);
 
-    let langs = if args.language.len() == 0 {
-        default_languages()
-    } else {
-        let mut langs = default_languages();
-        let custom_lang =
-            CustomLang::new(Regex::new(&args.language[0])?, args.language[1..].to_vec())?;
-        langs.insert(0, Box::new(custom_lang));
-        langs
-    };
+    let langs = make_languages(&args.language)?;
 
     if !args.outdir.exists() {
         create_dir_all(&args.outdir)?;
@@ -223,43 +216,58 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         let all_cases = find_files(&args.testcase, true)?;
         enumerate_valid_testcases(&all_cases)
     };
+    if testcases.len() == 0 {
+        warn!("no testcases found");
+        return Ok(());
+    }
 
     // generate outputs
     let dir = TempDir::new()?;
     let runstep = compile_and_get_runstep(&dir, &args.solver, &langs)?;
     for target in testcases.iter_mut() {
-        if let Ok((status, output)) = solve(
+        match solve(
             &dir,
             target.get_input_path().unwrap(),
             &args.outdir,
             &runstep,
             args.timelimit,
         ) {
-            println!("[OUTPUT] {:?}, status = {:?}", output, status);
+            Ok((status, output)) => {
+                info!("[OUTPUT] {:?}, status = {:?}", output, status);
 
-            *target = target.clone().output(&output);
-        } else {
-            println!("[IGNORED] {:?}", target);
+                *target = target.clone().output(&output);
+            }
+            Err(err) => {
+                warn!("[IGNORED] {:?}, reason {:?}", target, err);
+            }
         }
     }
 
     // judge
     if let Some(checker) = args.checker {
+        ensure!(checker.exists(), "checker {checker:?} not found");
+
         let dir = TempDir::new()?;
         let runstep = compile_and_get_runstep(&dir, &checker, &langs)?;
         for target in testcases.iter() {
-            if let Ok(status) = judge(&dir, target, &runstep) {
-                println!("[JUDGE] {:?}, status = {:?}", target, status);
-            } else {
-                println!("[IGNORED] {:?}", target);
+            match judge(&dir, target, &runstep) {
+                Ok(status) => {
+                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+                }
+                Err(err) => {
+                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
+                }
             }
         }
     } else {
         for target in testcases.iter() {
-            if let Ok(status) = judge_by_diff(&dir, target) {
-                println!("[JUDGE] {:?}, status = {:?}", target, status);
-            } else {
-                println!("[IGNORED] {:?}", target);
+            match judge_by_diff(&dir, target) {
+                Ok(status) => {
+                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+                }
+                Err(err) => {
+                    warn!("[JUDGE FAILED] {:?}, reason = {:?}", target, err);
+                }
             }
         }
     }
