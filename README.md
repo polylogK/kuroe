@@ -178,6 +178,9 @@ $ kuroe judge example/solver -c example/checker.cpp # checker によるジャッ
   - `-t`, `--testcase`：テストケースを含むディレクトリ or テストケースへのパス（複数可能）。`.in` と `.ans` が揃っているケースのみジャッジ。再帰的に探索される。デフォルトは `./testcases`
   - `-o`, `--outdir`：ソルバ出力先ディレクトリ。デフォルトは `./testcases/output`
   - `--tl`, `--timelimit`：生成のタイムリミット（秒）。デフォルトは 2.0
+  - `-p`, `--policy`：ジャッジポリシー。デフォルトは `all`
+    - `all`：全ケースを実行
+    - `tle-break`：TLE 発生以降ケースをスキップ
   - `-l`, `--language`：カスタム言語
 - 出力
   - `outdir` にソルバの出力が生成される
