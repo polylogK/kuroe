@@ -376,6 +376,10 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         }
         solvers
     };
+    if solvers.len() == 0 {
+        println!("no solver found!");
+        return Ok(());
+    }
     info!("solvers = {solvers:#?}");
 
     let testcases = {
@@ -387,7 +391,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
         enumerate_valid_testcases(&all_cases)
     };
     if testcases.len() == 0 {
-        warn!("no testcases found");
+        println!("no testcase found!");
         return Ok(());
     }
 
