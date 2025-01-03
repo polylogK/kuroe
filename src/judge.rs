@@ -1,7 +1,7 @@
 use crate::language::{compile_and_get_runstep, CommandStep, ExecuteStatus, Language};
 use crate::utils::{find_files, make_languages};
 use anyhow::{bail, ensure, Result};
-use clap::Args;
+use clap::{Args, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{info, warn};
 use std::collections::HashMap;
@@ -39,7 +39,8 @@ pub(super) struct JudgeArgs {
     timelimit: f64,
 
     /// judge policy
-    // todo!()
+    #[arg(short, long, value_enum, default_value_t = JudgePolicy::All)]
+    policy: JudgePolicy,
 
     /// COMMAND[0:-1] are the compile commands. COMMAND[-1] is execute command
     #[arg(
@@ -50,6 +51,15 @@ pub(super) struct JudgeArgs {
         value_delimiter = ','
     )]
     language: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
+enum JudgePolicy {
+    /// Run all cases anyway
+    All,
+
+    /// TLE ends the judge
+    TLEBreak,
 }
 
 #[derive(Debug, Clone)]
@@ -221,6 +231,7 @@ fn judge_root<P: AsRef<Path>>(
     langs: &Vec<Box<dyn Language>>,
     outdir: &Path,
     timelimit: f64,
+    policy: JudgePolicy,
 ) -> Result<()> {
     let outdir = outdir.join(solver.file_stem().unwrap().to_str().unwrap());
     if !outdir.exists() {
@@ -249,6 +260,10 @@ fn judge_root<P: AsRef<Path>>(
                 info!("[OUTPUT] {:?}, status = {:?}", output, status);
 
                 *target = target.clone().output(&output).status(status);
+
+                if policy == JudgePolicy::TLEBreak && status == ExecuteStatus::TimeLimitExceed {
+                    break;
+                }
             }
             Err(err) => {
                 warn!("[IGNORE] {:?}, reason = {:?}", target, err);
@@ -273,56 +288,72 @@ fn judge_root<P: AsRef<Path>>(
             .template(&format!("[JUDGE {solver:?}] {{bar}} {{pos:>4}}/{{len:4}}"))?,
     );
     for target in testcases.iter() {
-        if target.status.unwrap().success() {
-            let timer = Instant::now();
-            let status = if let Some(ref runstep) = checker_step {
-                judge(&checker_dir, target, runstep)
-            } else {
-                judge_by_diff(&checker_dir, target)
-            };
-            let elapsed = timer.elapsed();
+        match target.status {
+            Some(ExecuteStatus::Success) => {
+                // ジャッジ
+                let timer = Instant::now();
+                let status = if let Some(ref runstep) = checker_step {
+                    judge(&checker_dir, target, runstep)
+                } else {
+                    judge_by_diff(&checker_dir, target)
+                };
+                let elapsed = timer.elapsed();
 
-            match status {
-                Ok(status) => {
-                    info!("[JUDGE] {:#?}, status = {:?}", target, status);
+                // 結果の作成
+                match status {
+                    Ok(status) => {
+                        info!("[JUDGE] {:#?}, status = {:?}", target, status);
 
-                    let result = if status {
-                        Result {
-                            status: "AC".to_string(),
-                            input_and_answer: format!(
-                                "{:?}\n{:?}",
-                                target.get_input_path().unwrap(),
-                                target.get_answer_path().unwrap()
-                            ),
-                            info: format!("time = {elapsed:?}"),
-                        }
-                    } else {
-                        Result {
-                            status: "WA".to_string(),
-                            input_and_answer: format!(
-                                "{:?}\n{:?}",
-                                target.get_input_path().unwrap(),
-                                target.get_answer_path().unwrap()
-                            ),
-                            info: format!("{:?}", target.get_output_path().unwrap()),
-                        }
-                    };
-                    results.push(result);
-                }
-                Err(err) => {
-                    warn!("[JUDGE] {:?}, reason = {:?}", target, err);
+                        let result = if status {
+                            Result {
+                                status: "AC".to_string(),
+                                input_and_answer: format!(
+                                    "{:?}\n{:?}",
+                                    target.get_input_path().unwrap(),
+                                    target.get_answer_path().unwrap()
+                                ),
+                                info: format!("time = {elapsed:?}"),
+                            }
+                        } else {
+                            Result {
+                                status: "WA".to_string(),
+                                input_and_answer: format!(
+                                    "{:?}\n{:?}",
+                                    target.get_input_path().unwrap(),
+                                    target.get_answer_path().unwrap()
+                                ),
+                                info: format!("{:?}", target.get_output_path().unwrap()),
+                            }
+                        };
+                        results.push(result);
+                    }
+                    Err(err) => {
+                        warn!("[JUDGE] {:?}, reason = {:?}", target, err);
+                    }
                 }
             }
-        } else {
-            results.push(Result {
-                status: target.status.unwrap().to_string(),
-                input_and_answer: format!(
-                    "{:?}\n{:?}",
-                    target.get_input_path().unwrap(),
-                    target.get_answer_path().unwrap()
-                ),
-                info: format!("{:?}", target.get_output_path().unwrap()),
-            });
+            Some(status) => {
+                results.push(Result {
+                    status: status.to_string(),
+                    input_and_answer: format!(
+                        "{:?}\n{:?}",
+                        target.get_input_path().unwrap(),
+                        target.get_answer_path().unwrap()
+                    ),
+                    info: "".to_string(),
+                });
+            }
+            None => {
+                results.push(Result {
+                    status: "SKIP".to_string(),
+                    input_and_answer: format!(
+                        "{:?}\n{:?}",
+                        target.get_input_path().unwrap(),
+                        target.get_answer_path().unwrap()
+                    ),
+                    info: "".to_string(),
+                });
+            }
         }
         bar.inc(1);
     }
@@ -384,6 +415,7 @@ pub(super) fn root(args: JudgeArgs) -> Result<()> {
             &langs,
             &args.outdir,
             args.timelimit,
+            args.policy,
         )?;
 
         if i + 1 < solvers.len() {
