@@ -18,7 +18,7 @@ pub(super) struct JudgeArgs {
     #[arg(value_name = "SOLVER", required = true)]
     solvers: Vec<PathBuf>,
 
-    /// recursively search for validator
+    /// recursively search for solver
     #[arg(short, long, default_value_t = false)]
     recursive: bool,
 
