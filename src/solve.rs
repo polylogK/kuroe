@@ -106,8 +106,8 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
     #[derive(Tabled)]
     struct Result {
         status: String,
-        generated_answer: String,
         input: String,
+        generated_answer: String,
     }
     let mut results = Vec::new();
 
@@ -122,8 +122,8 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
 
                 results.push(Result {
                     status: status.to_string(),
-                    generated_answer: format!("{:?}", answer),
                     input: format!("{:?}", target),
+                    generated_answer: format!("{:?}", answer),
                 });
             }
             Err(err) => {
