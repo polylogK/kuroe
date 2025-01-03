@@ -142,6 +142,10 @@ pub(super) fn root(args: GenerateArgs) -> Result<()> {
         }
         generators
     };
+    if generators.len() == 0 {
+        println!("no generator found!");
+        return Ok(());
+    }
     info!("generators = {generators:#?}");
 
     let langs = make_languages(&args.language)?;

@@ -189,6 +189,10 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         }
         validators
     };
+    if validators.len() == 0 {
+        println!("no validator found!");
+        return Ok(());
+    }
     info!("validators = {validators:#?}");
 
     let testcases = {
@@ -207,7 +211,7 @@ pub(super) fn root(args: ValidateArgs) -> Result<()> {
         testcases
     };
     if testcases.len() == 0 {
-        warn!("no testcases found");
+        println!("no testcase found!");
         return Ok(());
     }
     info!("testcases = {testcases:#?}");

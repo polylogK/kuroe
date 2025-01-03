@@ -92,7 +92,7 @@ pub(super) fn root(args: SolveArgs) -> Result<()> {
         testcases
     };
     if testcases.len() == 0 {
-        warn!("no testcases found");
+        println!("no testcase found!");
         return Ok(());
     }
     info!("testcases = {testcases:#?}");
