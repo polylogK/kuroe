@@ -2,6 +2,12 @@
 name = "kuroe"
 version = "0.1.0"
 edition = "2021"
+authors = ["polylogK"]
+description = "kuroe is a lightweight CLI tool for creating competitive programming problems"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/polylogK/kuroe"
+readme = "README.md"
+keywords = ["competitive", "cli"]
 
 [dependencies]
 anyhow = "1.0.94"
