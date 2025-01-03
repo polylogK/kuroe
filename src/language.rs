@@ -89,6 +89,7 @@ impl CommandStep {
             .stderr(stderr)
             .spawn()
             .with_context(|| format!("Failed to execute {:?}", self))?;
+        debug!("{:#?}", child);
 
         let status = match child.wait_timeout(time_limit)? {
             Some(status) => ExecuteStatus::from(status),
@@ -276,14 +277,16 @@ pub(crate) fn compile_and_get_runstep<P: AsRef<Path>>(
     };
 
     for step in lang.compile(&target)? {
-        step.execute(
+        let status = step.execute(
             &current_dir,
             Vec::new(),
             Stdio::null(),
             Stdio::null(),
-            Stdio::null(),
+            Stdio::inherit(),
             Duration::from_secs(10),
         )?;
+
+        ensure!(status.success(), "failed to compile");
     }
 
     lang.run(&target)
